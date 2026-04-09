@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trace Cattle - Trazabilidad Ganadera Segura</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <!-- ══════════ Toast Notifications ══════════ -->
+    <div id="toast-container"></div>
+
+    <!-- ══════════ LOGIN ══════════ -->
+    <section id="page-login" class="page active">
+        <div class="login-container">
+            <div class="login-header">
+                <h1>&#x1F404; Trace Cattle</h1>
+                <p>Sistema de Trazabilidad Ganadera Segura</p>
+            </div>
+            <form id="form-login" class="form-card">
+                <h2>Iniciar Sesión</h2>
+                <div class="form-group">
+                    <label for="login-email">Correo electrónico</label>
+                    <input type="email" id="login-email" required placeholder="correo@ejemplo.com">
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Contraseña</label>
+                    <input type="password" id="login-password" required placeholder="Tu contraseña">
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">Ingresar</button>
+                <p class="text-center mt-1">
+                    ¿No tienes cuenta? <a href="#" onclick="showPage('page-register')">Registrarse</a>
+                </p>
+            </form>
+        </div>
+    </section>
+
+    <!-- ══════════ REGISTRO ══════════ -->
+    <section id="page-register" class="page">
+        <div class="login-container">
+            <div class="login-header">
+                <h1>&#x1F404; Trace Cattle</h1>
+                <p>Registro de nuevo usuario</p>
+            </div>
+            <form id="form-register" class="form-card">
+                <h2>Crear Cuenta</h2>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="reg-nombre">Nombre</label>
+                        <input type="text" id="reg-nombre" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reg-apellido">Apellido</label>
+                        <input type="text" id="reg-apellido" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="reg-email">Correo electrónico</label>
+                    <input type="email" id="reg-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="reg-telefono">Teléfono</label>
+                    <input type="tel" id="reg-telefono">
+                </div>
+                <div class="form-group">
+                    <label for="reg-password">Contraseña</label>
+                    <input type="password" id="reg-password" required minlength="6">
+                </div>
+                <div class="form-group">
+                    <label for="reg-rol">Rol</label>
+                    <select id="reg-rol" required>
+                        <option value="">Seleccionar rol</option>
+                        <option value="ganadero">Ganadero (Dueño de finca)</option>
+                        <option value="veterinario">Veterinario</option>
+                        <option value="transportista">Transportista</option>
+                        <option value="auditor">Auditor</option>
+                    </select>
+                </div>
+
+                <!-- Campos para GANADERO: crear finca nueva -->
+                <div id="finca-fields" style="display:none;">
+                    <div class="form-group" style="background:#f0f7f0; padding:1rem; border-radius:8px; margin-top:0.5rem;">
+                        <p style="font-weight:600; color:#2d5016; margin-bottom:0.5rem;">Datos de tu finca</p>
+                        <label for="reg-finca-nombre">Nombre de la finca *</label>
+                        <input type="text" id="reg-finca-nombre" placeholder="Ej: Finca La Esperanza">
+                        <label for="reg-finca-ubicacion" style="margin-top:0.5rem;">Ubicación</label>
+                        <input type="text" id="reg-finca-ubicacion" placeholder="Ej: San Carlos, Alajuela">
+                    </div>
+                </div>
+
+                <!-- Campos para OTROS ROLES: unirse a una finca -->
+                <div id="codigo-finca-fields" style="display:none;">
+                    <div class="form-group" style="background:#f0f4f7; padding:1rem; border-radius:8px; margin-top:0.5rem;">
+                        <p style="font-weight:600; color:#164d70; margin-bottom:0.5rem;">Unirse a una finca</p>
+                        <label for="reg-codigo-finca">Código de acceso *</label>
+                        <input type="text" id="reg-codigo-finca" placeholder="Ej: FIN-A3X9K" style="text-transform:uppercase;">
+                        <p style="font-size:0.85rem; color:#666; margin-top:0.3rem;">Pide este código al ganadero dueño de la finca.</p>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-full">Registrarse</button>
+                <p class="text-center mt-1">
+                    ¿Ya tienes cuenta? <a href="#" onclick="showPage('page-login')">Iniciar sesión</a>
+                </p>
+            </form>
+        </div>
+    </section>
+
+    <!-- ══════════ DASHBOARD ══════════ -->
+    <section id="page-dashboard" class="page">
+        <nav class="navbar">
+            <div class="nav-brand">&#x1F404; Trace Cattle</div>
+            <div class="nav-user">
+                <span id="nav-user-name"></span>
+                <span id="nav-user-role" class="badge"></span>
+                <button class="btn btn-sm btn-outline" onclick="logout()">Salir</button>
+            </div>
+        </nav>
+
+        <div class="nav-menu">
+            <button class="nav-btn active" data-target="section-home" onclick="showSection(this)">Inicio</button>
+            <button class="nav-btn" data-target="section-animals" onclick="showSection(this)">Animales</button>
+            <button class="nav-btn" data-target="section-search" onclick="showSection(this)">Búsqueda</button>
+            <button class="nav-btn" data-target="section-events" onclick="showSection(this)">Eventos</button>
+            <button class="nav-btn" data-target="section-biometrics" onclick="showSection(this)">Biometría</button>
+            <button class="nav-btn" data-target="section-audit" onclick="showSection(this)">Auditoría</button>
+        </div>
+
+        <main class="main-content">
+            <!-- ── Inicio ── -->
+            <div id="section-home" class="section active">
+                <h2>Panel de Control</h2>
+
+                <!-- Info de la finca -->
+                <div id="finca-info-card" class="info-card" style="display:none; margin-bottom:1.5rem; background:linear-gradient(135deg, #2d5016 0%, #4a7c24 100%); color:white; padding:1.5rem; border-radius:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+                        <div>
+                            <h3 id="finca-nombre" style="margin:0; font-size:1.4rem;">Finca</h3>
+                            <p id="finca-ubicacion" style="margin:0.3rem 0 0; opacity:0.85;"></p>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="background:rgba(255,255,255,0.2); padding:0.5rem 1rem; border-radius:8px;">
+                                <span style="font-size:0.8rem; opacity:0.8;">Código de acceso</span><br>
+                                <strong id="finca-codigo" style="font-size:1.2rem; letter-spacing:2px;"></strong>
+                            </div>
+                            <p style="font-size:0.75rem; margin:0.3rem 0 0; opacity:0.7;">Comparte este código para invitar miembros</p>
+                        </div>
+                    </div>
+                    <div id="finca-miembros" style="margin-top:1rem; font-size:0.9rem; opacity:0.9;"></div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number" id="stat-animals">0</div>
+                        <div class="stat-label">Animales registrados</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="stat-events">0</div>
+                        <div class="stat-label">Eventos totales</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="stat-bio">--</div>
+                        <div class="stat-label">Biometría</div>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <h3>Flujo de seguridad del sistema</h3>
+                    <div class="security-flow">
+                        <div class="flow-step">
+                            <div class="flow-icon">1</div>
+                            <div class="flow-text">Firma manuscrita</div>
+                        </div>
+                        <div class="flow-arrow">&rarr;</div>
+                        <div class="flow-step">
+                            <div class="flow-icon">2</div>
+                            <div class="flow-text">Reconocimiento facial</div>
+                        </div>
+                        <div class="flow-arrow">&rarr;</div>
+                        <div class="flow-step">
+                            <div class="flow-icon">3</div>
+                            <div class="flow-text">Verificación de voz</div>
+                        </div>
+                        <div class="flow-arrow">&rarr;</div>
+                        <div class="flow-step">
+                            <div class="flow-icon">#</div>
+                            <div class="flow-text">Hash + Firma ECDSA</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Animales ── -->
+            <div id="section-animals" class="section">
+                <div class="section-header">
+                    <h2>Gestión de Animales</h2>
+                    <button class="btn btn-primary" onclick="showAnimalForm()">+ Registrar Animal</button>
+                </div>
+
+                <!-- Formulario de animal -->
+                <div id="animal-form-container" class="form-card hidden">
+                    <h3>Registrar Nuevo Animal</h3>
+                    <form id="form-animal">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Código Único</label>
+                                <input type="text" id="animal-codigo" required placeholder="Ej: BOV-2024-001">
+                            </div>
+                            <div class="form-group">
+                                <label>Especie</label>
+                                <input type="text" id="animal-especie" required placeholder="Ej: Bovino">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Raza</label>
+                                <input type="text" id="animal-raza" placeholder="Ej: Brahman">
+                            </div>
+                            <div class="form-group">
+                                <label>Nombre</label>
+                                <input type="text" id="animal-nombre" placeholder="Ej: Luna">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Fecha de nacimiento</label>
+                                <input type="date" id="animal-fecha">
+                            </div>
+                            <div class="form-group">
+                                <label>Sexo</label>
+                                <select id="animal-sexo">
+                                    <option value="">Sin especificar</option>
+                                    <option value="M">Macho</option>
+                                    <option value="H">Hembra</option>
+                                    <option value="I">Indeterminado</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Peso (kg)</label>
+                                <input type="number" id="animal-peso" step="0.01" placeholder="Ej: 350.5">
+                            </div>
+                            <div class="form-group">
+                                <label>Color</label>
+                                <input type="text" id="animal-color" placeholder="Ej: Blanco con manchas">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Marcas o señales</label>
+                            <textarea id="animal-marcas" rows="2" placeholder="Descripción de marcas..."></textarea>
+                        </div>
+
+                        <h4 style="color:var(--primary-dark); margin: 1.5rem 0 0.5rem;">Trazabilidad Genealógica</h4>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Madre</label>
+                                <select id="animal-madre">
+                                    <option value="">Sin registrar</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Padre</label>
+                                <select id="animal-padre">
+                                    <option value="">Sin registrar</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="animal-inseminada" style="width:auto; margin-right:0.5rem;">
+                                Nacida por inseminación artificial
+                            </label>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">Guardar</button>
+                            <button type="button" class="btn btn-outline" onclick="hideAnimalForm()">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Lista de animales -->
+                <div id="animals-list" class="cards-grid"></div>
+            </div>
+
+            <!-- ── Búsqueda ── -->
+            <div id="section-search" class="section">
+                <div class="section-header">
+                    <h2>Búsqueda de Animales y Eventos</h2>
+                </div>
+
+                <div class="form-card">
+                    <h3>Formulario de búsqueda</h3>
+                    <form id="form-search" onsubmit="performSearch(event)">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Buscar por código, nombre, especie o raza</label>
+                                <input type="text" id="search-query" placeholder="Ej: BOV-2024, Luna, Bovino...">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Tipo de búsqueda</label>
+                                <select id="search-type">
+                                    <option value="todos">Todos</option>
+                                    <option value="animales">Animales</option>
+                                    <option value="eventos">Eventos</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row" id="search-animal-filters">
+                            <div class="form-group">
+                                <label>Especie</label>
+                                <input type="text" id="search-especie" placeholder="Ej: Bovino">
+                            </div>
+                            <div class="form-group">
+                                <label>Raza</label>
+                                <input type="text" id="search-raza" placeholder="Ej: Brahman">
+                            </div>
+                        </div>
+
+                        <div class="form-row" id="search-event-filters">
+                            <div class="form-group">
+                                <label>Tipo de evento</label>
+                                <select id="search-tipo-evento">
+                                    <option value="">Todos</option>
+                                    <option value="nacimiento">Nacimiento</option>
+                                    <option value="vacunacion">Vacunación</option>
+                                    <option value="desparacitacion">Desparasitación</option>
+                                    <option value="traslado">Traslado</option>
+                                    <option value="cambio_propietario">Cambio de propietario</option>
+                                    <option value="certificacion_sanitaria">Certificación sanitaria</option>
+                                    <option value="muerte">Muerte</option>
+                                    <option value="venta">Venta</option>
+                                    <option value="auditoria">Auditoría</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row" id="search-date-filters">
+                            <div class="form-group">
+                                <label>Desde</label>
+                                <input type="date" id="search-fecha-desde">
+                            </div>
+                            <div class="form-group">
+                                <label>Hasta</label>
+                                <input type="date" id="search-fecha-hasta">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">Buscar</button>
+                    </form>
+                </div>
+
+                <div id="search-results" class="mt-2"></div>
+            </div>
+
+            <!-- ── Eventos Ganaderos ── -->
+            <div id="section-events" class="section">
+                <div class="section-header">
+                    <h2>Registro de Eventos</h2>
+                </div>
+
+                <div class="form-card">
+                    <h3>Nuevo Evento Ganadero</h3>
+                    <p class="text-muted">Se requieren las 3 llaves biométricas para registrar un evento.</p>
+
+                    <!-- Paso 0: Datos del evento -->
+                    <div id="event-step-0">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Animal</label>
+                                <select id="event-animal" required>
+                                    <option value="">Seleccionar animal...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Tipo de evento</label>
+                                <select id="event-tipo" required onchange="updateEventFields()">
+                                    <option value="">Seleccionar tipo...</option>
+                                    <option value="nacimiento">Nacimiento</option>
+                                    <option value="vacunacion">Vacunación</option>
+                                    <option value="desparacitacion">Desparasitación</option>
+                                    <option value="traslado">Traslado</option>
+                                    <option value="cambio_propietario">Cambio de propietario</option>
+                                    <option value="certificacion_sanitaria">Certificación sanitaria</option>
+                                    <option value="muerte">Muerte</option>
+                                    <option value="venta">Venta</option>
+                                    <option value="auditoria">Auditoría</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Campos dinámicos del evento -->
+                        <div id="event-dynamic-fields"></div>
+
+                        <div class="form-group">
+                            <label>Ubicación</label>
+                            <input type="text" id="event-ubicacion" placeholder="Ej: Finca La Esperanza, Llanos Orientales">
+                        </div>
+
+                        <button class="btn btn-primary" onclick="startBiometricValidation()">
+                            Continuar con validación biométrica
+                        </button>
+                    </div>
+
+                    <!-- Steps de validación biométrica -->
+                    <div id="event-biometric-steps" class="hidden">
+                        <div class="steps-indicator">
+                            <div class="step" id="step-firma-indicator">
+                                <div class="step-number">1</div>
+                                <div class="step-label">Firma</div>
+                            </div>
+                            <div class="step" id="step-rostro-indicator">
+                                <div class="step-number">2</div>
+                                <div class="step-label">Rostro</div>
+                            </div>
+                            <div class="step" id="step-voz-indicator">
+                                <div class="step-number">3</div>
+                                <div class="step-label">Voz</div>
+                            </div>
+                        </div>
+
+                        <!-- Paso 1: Firma -->
+                        <div id="event-step-1" class="biometric-step">
+                            <h4>Llave 1: Firma Manuscrita Digital</h4>
+                            <p>Dibuje su firma en el recuadro:</p>
+                            <canvas id="signature-canvas" width="500" height="200"></canvas>
+                            <div class="canvas-controls">
+                                <button class="btn btn-sm btn-outline" onclick="clearSignature()">Borrar</button>
+                                <button class="btn btn-sm btn-primary" onclick="confirmSignature()">Confirmar firma</button>
+                            </div>
+                        </div>
+
+                        <!-- Paso 2: Rostro -->
+                        <div id="event-step-2" class="biometric-step hidden">
+                            <h4>Llave 2: Reconocimiento Facial</h4>
+                            <p>Posicione su rostro frente a la cámara:</p>
+                            <div class="camera-container">
+                                <video id="face-video" autoplay playsinline></video>
+                                <canvas id="face-canvas" class="hidden"></canvas>
+                            </div>
+                            <div id="face-preview" class="hidden">
+                                <img id="face-preview-img" alt="Vista previa del rostro">
+                            </div>
+                            <div class="canvas-controls">
+                                <button class="btn btn-sm btn-primary" id="btn-capture-face" onclick="captureFace()">Capturar foto</button>
+                                <button class="btn btn-sm btn-outline hidden" id="btn-retry-face" onclick="retryFace()">Reintentar</button>
+                                <button class="btn btn-sm btn-primary hidden" id="btn-confirm-face" onclick="confirmFace()">Confirmar rostro</button>
+                            </div>
+                        </div>
+
+                        <!-- Paso 3: Voz -->
+                        <div id="event-step-3" class="biometric-step hidden">
+                            <h4>Llave 3: Verificación de Voz</h4>
+                            <p>Diga la frase: <strong>"Autorizo este registro en Trace Cattle"</strong></p>
+                            <div class="voice-container">
+                                <div id="voice-indicator" class="voice-indicator">
+                                    <div class="voice-circle"></div>
+                                    <span id="voice-status">Listo para grabar</span>
+                                </div>
+                                <audio id="voice-playback" controls class="hidden"></audio>
+                            </div>
+                            <div class="canvas-controls">
+                                <button class="btn btn-sm btn-primary" id="btn-record-voice" onclick="toggleVoiceRecording()">Grabar voz</button>
+                                <button class="btn btn-sm btn-primary hidden" id="btn-confirm-voice" onclick="confirmVoice()">Confirmar voz</button>
+                            </div>
+                        </div>
+
+                        <!-- Enviar evento -->
+                        <div id="event-step-submit" class="hidden">
+                            <div class="validation-summary">
+                                <h4>Resumen de validación</h4>
+                                <div class="validation-items">
+                                    <div class="validation-item" id="val-firma">
+                                        <span class="val-icon">&#x23F3;</span>
+                                        <span>Firma manuscrita</span>
+                                    </div>
+                                    <div class="validation-item" id="val-rostro">
+                                        <span class="val-icon">&#x23F3;</span>
+                                        <span>Reconocimiento facial</span>
+                                    </div>
+                                    <div class="validation-item" id="val-voz">
+                                        <span class="val-icon">&#x23F3;</span>
+                                        <span>Verificación de voz</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary btn-full" onclick="submitEvent()">
+                                Registrar Evento con Triple Validación
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Resultado -->
+                    <div id="event-result" class="hidden"></div>
+                </div>
+
+                <!-- Historial de eventos -->
+                <div class="mt-2">
+                    <h3>Eventos Recientes</h3>
+                    <div id="events-list" class="table-container"></div>
+                </div>
+            </div>
+
+            <!-- ── Biometría ── -->
+            <div id="section-biometrics" class="section">
+                <h2>Registro Biométrico</h2>
+                <div id="bio-status" class="info-card"></div>
+
+                <div class="form-card" id="bio-register-form">
+                    <h3>Registrar Plantillas Biométricas</h3>
+                    <p>Registre sus 3 llaves de seguridad para poder crear eventos ganaderos.</p>
+
+                    <div class="form-group">
+                        <label>1. Firma manuscrita (imagen PNG/JPG)</label>
+                        <canvas id="bio-signature-canvas" width="500" height="200"></canvas>
+                        <div class="canvas-controls">
+                            <button class="btn btn-sm btn-outline" onclick="clearBioSignature()">Borrar</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>2. Foto del rostro</label>
+                        <div class="camera-container">
+                            <video id="bio-face-video" autoplay playsinline></video>
+                            <canvas id="bio-face-canvas" class="hidden"></canvas>
+                        </div>
+                        <div id="bio-face-preview" class="hidden">
+                            <img id="bio-face-preview-img" alt="Vista previa">
+                        </div>
+                        <div class="canvas-controls">
+                            <button class="btn btn-sm btn-primary" id="btn-bio-capture-face" onclick="captureBioFace()">Capturar foto</button>
+                            <button class="btn btn-sm btn-outline hidden" id="btn-bio-retry-face" onclick="retryBioFace()">Reintentar</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>3. Grabación de voz (diga: "Mi voz es mi contraseña")</label>
+                        <div class="voice-container">
+                            <div id="bio-voice-indicator" class="voice-indicator">
+                                <div class="voice-circle"></div>
+                                <span id="bio-voice-status">Listo para grabar</span>
+                            </div>
+                            <audio id="bio-voice-playback" controls class="hidden"></audio>
+                        </div>
+                        <div class="canvas-controls">
+                            <button class="btn btn-sm btn-primary" id="btn-bio-record-voice" onclick="toggleBioVoiceRecording()">Grabar voz</button>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary btn-full" onclick="registerBiometrics()">
+                        Registrar Datos Biométricos
+                    </button>
+                </div>
+            </div>
+
+            <!-- ── Auditoría ── -->
+            <div id="section-audit" class="section">
+                <h2>Auditoría y Consulta</h2>
+
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="showAuditTab('audit-history')">Historial Animal</button>
+                    <button class="tab-btn" onclick="showAuditTab('audit-integrity')">Integridad</button>
+                    <button class="tab-btn" onclick="showAuditTab('audit-log')">Bitácora</button>
+                    <button class="tab-btn" onclick="showAuditTab('audit-alerts')">Alertas</button>
+                </div>
+
+                <div id="audit-history" class="audit-tab active">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Seleccionar animal:</label>
+                            <select id="audit-animal-select" onchange="loadAnimalAudit()">
+                                <option value="">Seleccionar...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="audit-animal-report"></div>
+                </div>
+
+                <div id="audit-integrity" class="audit-tab hidden">
+                    <button class="btn btn-primary" onclick="checkGlobalIntegrity()">Verificar Integridad Global</button>
+                    <div id="integrity-results" class="mt-1"></div>
+                </div>
+
+                <div id="audit-log" class="audit-tab hidden">
+                    <div id="bitacora-list" class="table-container"></div>
+                </div>
+
+                <div id="audit-alerts" class="audit-tab hidden">
+                    <div id="alerts-list" class="table-container"></div>
+                </div>
+            </div>
+        </main>
+    </section>
+
+    <script src="js/app.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/animals.js"></script>
+    <script src="js/search.js"></script>
+    <script src="js/events.js"></script>
+    <script src="js/biometrics.js"></script>
+    <script src="js/audit.js"></script>
+</body>
+</html>

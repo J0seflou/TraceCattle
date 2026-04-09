@@ -1,0 +1,41 @@
+========================================
+  TRACE CATTLE - Instrucciones de Instalacion
+========================================
+
+REQUISITOS:
+- Python 3.10 o superior
+- PostgreSQL instalado y corriendo
+
+PASOS:
+
+1. AGREGAR POSTGRESQL AL PATH (si no lo tienes):
+   En PowerShell:
+   $env:Path += ";C:\Program Files\PostgreSQL\TU_VERSION\bin"
+   (Cambia TU_VERSION por tu numero, ej: 16, 17, 18)
+
+2. CREAR LA BASE DE DATOS:
+   psql -U postgres -c 'CREATE DATABASE "PruebaTC";'
+   (Te pedira tu contrasena de PostgreSQL)
+
+3. INSTALAR DEPENDENCIAS:
+   pip install -r requirements.txt
+   pip install bcrypt==3.2.2
+
+4. CREAR ARCHIVO .env:
+   Crea un archivo llamado ".env" en esta misma carpeta con este contenido:
+   DATABASE_URL=postgresql+psycopg2://postgres:TU_CONTRASENA@localhost:5432/PruebaTC
+   (Cambia TU_CONTRASENA por tu contrasena de PostgreSQL)
+
+5. EJECUTAR EL SERVIDOR:
+   uvicorn backend.main:app --reload
+
+6. ABRIR EN EL NAVEGADOR:
+   http://localhost:8000
+
+COMO USAR:
+- El GANADERO crea una cuenta y su finca
+- La finca genera un CODIGO DE ACCESO (ej: FIN-A3X9K)
+- Veterinarios, transportistas y auditores usan ese codigo para unirse
+- Todos los animales y eventos se organizan por finca
+
+========================================
