@@ -160,6 +160,22 @@ class EventoResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Cambio de credenciales biométricas ──
+
+class SolicitarCambioRequest(BaseModel):
+    tipo_credencial: str = Field(
+        ...,
+        description="Credencial a cambiar: 'firma', 'rostro' o 'voz'",
+        pattern="^(firma|rostro|voz)$",
+    )
+
+
+class SolicitarCambioResponse(BaseModel):
+    mensaje: str
+    email_destino: str
+    expira_minutos: int
+
+
 # ── Biometría ──
 
 class BiometricValidationResponse(BaseModel):

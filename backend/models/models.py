@@ -169,6 +169,21 @@ class EventoGanadero(Base):
     validacion = relationship("ValidacionBiometrica", back_populates="evento", uselist=False)
 
 
+class CodigoCambioBiometrico(Base):
+    """Códigos temporales de verificación para cambiar credenciales biométricas."""
+    __tablename__ = "codigos_cambio_biometrico"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_users = Column(UUID(as_uuid=True), ForeignKey("users.id_users", ondelete="CASCADE"), nullable=False)
+    codigo = Column(String(6), nullable=False)
+    tipo_credencial = Column(String(10), nullable=False)  # "firma", "rostro", "voz"
+    usado = Column(Boolean, nullable=False, default=False)
+    expira_en = Column(DateTime, nullable=False)
+    creado_en = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    user = relationship("User")
+
+
 class ValidacionBiometrica(Base):
     __tablename__ = "validaciones_biometricas"
 

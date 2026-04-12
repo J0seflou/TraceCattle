@@ -23,12 +23,20 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     # Umbrales biométricos
-    SIGNATURE_THRESHOLD: float = 0.75
+    SIGNATURE_THRESHOLD: float = 0.10
     FACE_THRESHOLD: float = 0.70
     VOICE_THRESHOLD: float = 0.70
 
     # Directorio de archivos
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "uploads")
+
+    # Email / SMTP
+    SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USER: str = os.getenv("SMTP_USER", "")
+    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
+    SMTP_FROM: str = os.getenv("SMTP_FROM", "") or os.getenv("SMTP_USER", "no-reply@tracecattle.com")
+    CODIGO_CAMBIO_EXPIRA_MINUTOS: int = 10
 
     class Config:
         env_file = ".env"
