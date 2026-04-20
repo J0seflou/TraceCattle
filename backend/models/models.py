@@ -78,6 +78,7 @@ class User(Base):
     email = Column(String(150), nullable=False, unique=True)
     contrasena_hash = Column(Text, nullable=False)
     telefono = Column(String(20))
+    numero_senasa = Column(String(50), nullable=True)
     activo = Column(Boolean, nullable=False, default=True)
     creado_en = Column(DateTime, nullable=False, default=datetime.utcnow)
     actualizado_en = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

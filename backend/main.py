@@ -14,6 +14,15 @@ from backend.routers import auth, users, animals, events, biometrics, audit, sea
 # Crear tablas automáticamente al iniciar (para despliegue en la nube)
 Base.metadata.create_all(bind=engine)
 
+# Migración: agregar columna numero_senasa si no existe
+from sqlalchemy import text
+try:
+    with engine.connect() as _conn:
+        _conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS numero_senasa VARCHAR(50)"))
+        _conn.commit()
+except Exception:
+    pass
+
 # Insertar roles iniciales si no existen
 from backend.database import SessionLocal
 from backend.models.models import Role

@@ -33,17 +33,28 @@ document.getElementById('reg-rol').addEventListener('change', function () {
     const rol = this.value;
     const fincaFields = document.getElementById('finca-fields');
     const codigoFields = document.getElementById('codigo-finca-fields');
+    const senasaFields = document.getElementById('senasa-fields');
 
     if (rol === 'ganadero') {
         fincaFields.style.display = 'block';
         codigoFields.style.display = 'none';
+        senasaFields.style.display = 'none';
         document.getElementById('reg-finca-nombre').required = true;
         document.getElementById('reg-codigo-finca').required = false;
+        document.getElementById('reg-numero-senasa').required = false;
     } else {
         fincaFields.style.display = 'none';
         codigoFields.style.display = 'block';
         document.getElementById('reg-finca-nombre').required = false;
         document.getElementById('reg-codigo-finca').required = true;
+
+        if (rol === 'auditor') {
+            senasaFields.style.display = 'block';
+            document.getElementById('reg-numero-senasa').required = true;
+        } else {
+            senasaFields.style.display = 'none';
+            document.getElementById('reg-numero-senasa').required = false;
+        }
     }
 });
 
@@ -68,6 +79,10 @@ document.getElementById('form-register').addEventListener('submit', async (e) =>
     } else {
         // Si es otro rol, enviar código de finca
         body.codigo_finca = document.getElementById('reg-codigo-finca').value.toUpperCase();
+        // Si es auditor, enviar número de carné SENASA
+        if (rolNombre === 'auditor') {
+            body.numero_senasa = document.getElementById('reg-numero-senasa').value || null;
+        }
     }
 
     try {

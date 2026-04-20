@@ -42,6 +42,8 @@ class UserCreate(BaseModel):
     finca_ubicacion: Optional[str] = Field(None, max_length=300)
     # Para otros roles: código de acceso a una finca existente
     codigo_finca: Optional[str] = Field(None, max_length=10)
+    # Para auditores: número de carné SENASA
+    numero_senasa: Optional[str] = Field(None, max_length=50)
 
 
 class UserLogin(BaseModel):

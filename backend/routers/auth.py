@@ -103,6 +103,7 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
         email=user_data.email,
         contrasena_hash=hash_password(user_data.contrasena),
         telefono=user_data.telefono,
+        numero_senasa=user_data.numero_senasa if user_data.rol_nombre == "auditor" else None,
     )
     db.add(new_user)
     db.flush()
