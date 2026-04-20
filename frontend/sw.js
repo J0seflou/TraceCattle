@@ -1,6 +1,6 @@
 /* ══════════ Trace Cattle - Service Worker ══════════ */
 
-const CACHE_NAME = 'tracecattle-v1';
+const CACHE_NAME = 'tracecattle-v2';
 const STATIC_ASSETS = [
   '/',
   '/css/styles.css',
