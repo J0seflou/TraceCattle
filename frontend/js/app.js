@@ -70,6 +70,14 @@ function initApp() {
         document.getElementById('nav-user-name').textContent =
             `${state.user.nombre} ${state.user.apellido}`;
         document.getElementById('nav-user-role').textContent = state.user.rol_nombre;
+
+        // Mostrar/ocultar secciones según el rol
+        const rol = state.user.rol_nombre;
+        const auditBtn = document.querySelector('[data-target="section-audit"]');
+        if (auditBtn) {
+            auditBtn.style.display = rol === 'auditor' ? '' : 'none';
+        }
+
         loadDashboardStats();
     } else {
         showPage('page-login');
