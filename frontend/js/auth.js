@@ -101,7 +101,17 @@ document.getElementById('form-register').addEventListener('submit', async (e) =>
             showToast('Cuenta creada exitosamente', 'success');
             initApp();
         } else {
-            showToast(data.detail || 'Error al registrarse', 'error');
+            let msg = 'Error al registrarse';
+            if (data.detail) {
+                if (typeof data.detail === 'string') {
+                    msg = data.detail;
+                } else if (Array.isArray(data.detail)) {
+                    msg = data.detail.map(e => e.msg || JSON.stringify(e)).join(', ');
+                } else {
+                    msg = JSON.stringify(data.detail);
+                }
+            }
+            showToast(msg, 'error');
         }
     } catch (err) {
         showToast('Error de conexión con el servidor', 'error');
