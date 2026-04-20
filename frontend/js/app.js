@@ -71,12 +71,33 @@ function initApp() {
             `${state.user.nombre} ${state.user.apellido}`;
         document.getElementById('nav-user-role').textContent = state.user.rol_nombre;
 
-        // Mostrar/ocultar pestañas de auditoría según el rol
+        // ── Control de visibilidad por rol ──
         const rol = state.user.rol_nombre;
+
         // Bitácora y Alertas solo para auditor
         document.querySelectorAll('.audit-only-tab').forEach(el => {
             el.style.display = rol === 'auditor' ? '' : 'none';
         });
+
+        // Botón "Registrar Animal" solo para ganadero
+        const btnAnimal = document.getElementById('btn-registrar-animal');
+        if (btnAnimal) btnAnimal.style.display = rol === 'ganadero' ? '' : 'none';
+
+        // Filtrar tipos de evento según rol
+        const PERMISOS_EVENTOS = {
+            ganadero:      ['nacimiento', 'vacunacion', 'desparacitacion', 'muerte', 'venta', 'cambio_propietario'],
+            veterinario:   ['nacimiento', 'vacunacion', 'desparacitacion', 'muerte'],
+            transportista: ['traslado'],
+            auditor:       ['auditoria', 'certificacion_sanitaria'],
+        };
+        const eventosPermitidos = PERMISOS_EVENTOS[rol] || [];
+        const selectEvento = document.getElementById('event-tipo');
+        if (selectEvento) {
+            Array.from(selectEvento.options).forEach(opt => {
+                if (opt.value === '') return; // mantener placeholder
+                opt.style.display = eventosPermitidos.includes(opt.value) ? '' : 'none';
+            });
+        }
 
         loadDashboardStats();
     } else {

@@ -213,9 +213,9 @@ def update_animal(
     if not animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
 
-    rol_nombre = current_user.rol.nombre if current_user.rol else ""
-    if animal.propietario_id != current_user.id_users and rol_nombre != "auditor":
-        raise HTTPException(status_code=403, detail="Solo el propietario puede editar este animal")
+    # Todos los roles pueden editar animales de su finca
+    if current_user.finca_id and animal.finca_id != current_user.finca_id:
+        raise HTTPException(status_code=403, detail="No puedes editar animales de otra finca")
 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():

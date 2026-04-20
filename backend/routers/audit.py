@@ -150,12 +150,16 @@ def global_integrity_check(
     rol_nombre = current_user.rol.nombre if current_user.rol else ""
 
     if rol_nombre == "auditor":
-        animales = db.query(Animal).filter(Animal.activo == True).all()
-    else:
-        # Non-auditors only see their own animals
+        # Auditor ve todos los animales de su finca
         animales = db.query(Animal).filter(
             Animal.activo == True,
-            Animal.propietario_id == current_user.id_users
+            Animal.finca_id == current_user.finca_id
+        ).all()
+    else:
+        # Otros roles ven los animales de su finca
+        animales = db.query(Animal).filter(
+            Animal.activo == True,
+            Animal.finca_id == current_user.finca_id
         ).all()
 
     resultados = []
