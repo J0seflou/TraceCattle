@@ -76,7 +76,15 @@
                 </div>
                 <div class="form-group">
                     <label for="reg-rol">Rol</label>
-                    <select id="reg-rol" required>
+                    <select id="reg-rol" required onchange="
+                        var rol = this.value;
+                        document.getElementById('finca-fields').style.display = rol === 'ganadero' ? 'block' : 'none';
+                        document.getElementById('codigo-finca-fields').style.display = rol && rol !== 'ganadero' ? 'block' : 'none';
+                        document.getElementById('senasa-fields').style.display = rol === 'auditor' ? 'block' : 'none';
+                        document.getElementById('reg-finca-nombre').required = rol === 'ganadero';
+                        document.getElementById('reg-codigo-finca').required = rol !== 'ganadero' && rol !== '';
+                        document.getElementById('reg-numero-senasa').required = rol === 'auditor';
+                    ">
                         <option value="">Seleccionar rol</option>
                         <option value="ganadero">Ganadero (Dueño de finca)</option>
                         <option value="veterinario">Veterinario</option>
