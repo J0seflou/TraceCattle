@@ -18,23 +18,31 @@ Base.metadata.create_all(bind=engine)
 
 # Migraciones incrementales: agregar columnas nuevas si no existen
 from sqlalchemy import text as _sql_text
-with engine.connect() as _conn:
-    # origen_desconocido en animales
-    _conn.execute(_sql_text("""
-        ALTER TABLE animales
-        ADD COLUMN IF NOT EXISTS origen_desconocido BOOLEAN NOT NULL DEFAULT FALSE
-    """))
-    # clave_publica_pem en eventos_ganaderos
-    _conn.execute(_sql_text("""
-        ALTER TABLE eventos_ganaderos
-        ADD COLUMN IF NOT EXISTS clave_publica_pem TEXT
-    """))
-    # info_pajilla en animales
-    _conn.execute(_sql_text("""
-        ALTER TABLE animales
-        ADD COLUMN IF NOT EXISTS info_pajilla TEXT
-    """))
-    _conn.commit()
+try:
+    with engine.connect() as _conn:
+        # origen_desconocido en animales
+        _conn.execute(_sql_text("""
+            ALTER TABLE animales
+            ADD COLUMN IF NOT EXISTS origen_desconocido BOOLEAN NOT NULL DEFAULT FALSE
+        """))
+        # clave_publica_pem en eventos_ganaderos
+        _conn.execute(_sql_text("""
+            ALTER TABLE eventos_ganaderos
+            ADD COLUMN IF NOT EXISTS clave_publica_pem TEXT
+        """))
+        # info_pajilla en animales
+        _conn.execute(_sql_text("""
+            ALTER TABLE animales
+            ADD COLUMN IF NOT EXISTS info_pajilla TEXT
+        """))
+        # numero_senasa en users
+        _conn.execute(_sql_text("""
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS numero_senasa VARCHAR(50)
+        """))
+        _conn.commit()
+except Exception:
+    pass
 
 # ── Seeding inicial: roles y usuario administrador ──
 from backend.database import SessionLocal
