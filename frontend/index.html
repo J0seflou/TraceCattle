@@ -4,14 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trace Cattle - Trazabilidad Ganadera Segura</title>
-    <!-- PWA -->
-    <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#2d5016">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="TraceCattle">
-    <link rel="apple-touch-icon" href="/assets/icon-192.png">
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -76,15 +68,7 @@
                 </div>
                 <div class="form-group">
                     <label for="reg-rol">Rol</label>
-                    <select id="reg-rol" required onchange="
-                        var rol = this.value;
-                        document.getElementById('finca-fields').style.display = rol === 'ganadero' ? 'block' : 'none';
-                        document.getElementById('codigo-finca-fields').style.display = rol && rol !== 'ganadero' ? 'block' : 'none';
-                        document.getElementById('senasa-fields').style.display = rol === 'auditor' ? 'block' : 'none';
-                        document.getElementById('reg-finca-nombre').required = rol === 'ganadero';
-                        document.getElementById('reg-codigo-finca').required = rol !== 'ganadero' && rol !== '';
-                        document.getElementById('reg-numero-senasa').required = rol === 'auditor';
-                    ">
+                    <select id="reg-rol" required>
                         <option value="">Seleccionar rol</option>
                         <option value="ganadero">Ganadero (Dueño de finca)</option>
                         <option value="veterinario">Veterinario</option>
@@ -114,13 +98,13 @@
                     </div>
                 </div>
 
-                <!-- Campo exclusivo para AUDITOR: carné SENASA -->
-                <div id="senasa-fields" style="display:none;">
-                    <div class="form-group" style="background:#fff8e1; padding:1rem; border-radius:8px; margin-top:0.5rem; border-left:4px solid #f9a825;">
-                        <p style="font-weight:600; color:#e65100; margin-bottom:0.5rem;">Identificación SENASA</p>
-                        <label for="reg-numero-senasa">Número de carné SENASA *</label>
-                        <input type="text" id="reg-numero-senasa" placeholder="Ej: SENASA-AUD-001">
-                        <p style="font-size:0.85rem; color:#666; margin-top:0.3rem;">Ingresa tu número de carné para verificarlo.</p>
+                <!-- Campos para AUDITOR: carné SENASA -->
+                <div id="carnet-senasa-fields" style="display:none;">
+                    <div class="form-group" style="background:#fff8e1; padding:1rem; border-radius:8px; margin-top:0.5rem; border-left:4px solid #f59e0b;">
+                        <p style="font-weight:600; color:#92400e; margin-bottom:0.5rem;">Identificación SENASA</p>
+                        <label for="reg-carnet-senasa">Número de carné SENASA *</label>
+                        <input type="text" id="reg-carnet-senasa" placeholder="Ej: SENASA-AUD-001" style="text-transform:uppercase;" oninput="validarCarnetSenasa(this.value)">
+                        <p id="carnet-senasa-feedback" style="font-size:0.85rem; margin-top:0.4rem; color:#666;">Ingresa tu número de carné para verificarlo.</p>
                     </div>
                 </div>
 
@@ -132,11 +116,35 @@
         </div>
     </section>
 
+    <!-- ══════════ SELECTOR DE FINCA (ADMIN) ══════════ -->
+    <section id="page-admin-selector" class="page">
+        <div style="min-height:100vh; background:var(--bg); padding:2rem 1rem;">
+            <div style="max-width:900px; margin:0 auto;">
+                <div style="text-align:center; margin-bottom:2.5rem;">
+                    <h1 style="color:var(--primary-dark); font-size:1.8rem;">&#x1F404; Trace Cattle</h1>
+                    <p style="color:var(--text-muted); margin-top:0.4rem;">Panel de Administrador — Selecciona la finca que deseas gestionar</p>
+                </div>
+
+                <div id="admin-fincas-grid" class="cards-grid" style="margin-bottom:2rem;">
+                    <p style="color:var(--text-muted);">Cargando fincas...</p>
+                </div>
+
+                <div style="text-align:center;">
+                    <button onclick="logout()" class="btn btn-outline" style="font-size:0.9rem;">Cerrar sesión</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- ══════════ DASHBOARD ══════════ -->
     <section id="page-dashboard" class="page">
         <nav class="navbar">
             <div class="nav-brand">&#x1F404; Trace Cattle</div>
             <div class="nav-user">
+                <span id="nav-admin-finca-info" style="display:none; font-size:0.85rem; opacity:0.85; margin-right:0.5rem;">
+                    Finca: <strong id="nav-admin-finca-nombre"></strong>
+                </span>
+                <button id="btn-cambiar-finca" onclick="cambiarFincaAdmin()" class="btn btn-sm" style="display:none; background:#f59e0b; color:#fff; border:none; margin-right:0.5rem;">Cambiar finca</button>
                 <span id="nav-user-name"></span>
                 <span id="nav-user-role" class="badge"></span>
                 <button class="btn btn-sm btn-outline" onclick="logout()">Salir</button>
@@ -149,13 +157,30 @@
             <button class="nav-btn" data-target="section-search" onclick="showSection(this)">Búsqueda</button>
             <button class="nav-btn" data-target="section-events" onclick="showSection(this)">Eventos</button>
             <button class="nav-btn" data-target="section-biometrics" onclick="showSection(this)">Biometría</button>
-            <button class="nav-btn" data-target="section-audit" onclick="showSection(this)">Auditoría</button>
+            <button id="nav-btn-audit" class="nav-btn" data-target="section-audit" onclick="showSection(this)">Auditoría</button>
+            <button id="nav-btn-users" class="nav-btn" data-target="section-users" onclick="showSection(this)" style="display:none;">Usuarios</button>
         </div>
 
         <main class="main-content">
             <!-- ── Inicio ── -->
             <div id="section-home" class="section active">
                 <h2>Panel de Control</h2>
+
+                <!-- Sin finca: unirse -->
+                <div id="sin-finca-card" style="display:none; margin-bottom:1.5rem; background:linear-gradient(135deg, #164d70 0%, #1f6fa3 100%); color:white; padding:1.5rem; border-radius:12px;">
+                    <h3 style="margin:0 0 0.5rem;">No perteneces a ninguna finca</h3>
+                    <p style="margin:0 0 1rem; opacity:0.85; font-size:0.9rem;">Ingresa el código de acceso que te compartió el administrador de la finca.</p>
+                    <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
+                        <input type="text" id="input-codigo-finca" placeholder="Ej: FIN-A3X9K"
+                               style="flex:1; min-width:160px; padding:0.55rem 0.9rem; border-radius:8px; border:none;
+                                      font-size:1rem; text-transform:uppercase; letter-spacing:1px; outline:none;">
+                        <button onclick="unirseAFinca()"
+                                style="background:#fff; color:#164d70; border:none; padding:0.55rem 1.2rem;
+                                       border-radius:8px; font-weight:600; cursor:pointer; white-space:nowrap;">
+                            Unirme
+                        </button>
+                    </div>
+                </div>
 
                 <!-- Info de la finca -->
                 <div id="finca-info-card" class="info-card" style="display:none; margin-bottom:1.5rem; background:linear-gradient(135deg, #2d5016 0%, #4a7c24 100%); color:white; padding:1.5rem; border-radius:12px;">
@@ -172,7 +197,15 @@
                             <p style="font-size:0.75rem; margin:0.3rem 0 0; opacity:0.7;">Comparte este código para invitar miembros</p>
                         </div>
                     </div>
-                    <div id="finca-miembros" style="margin-top:1rem; font-size:0.9rem; opacity:0.9;"></div>
+
+                    <!-- Lista de miembros con gestión -->
+                    <div style="margin-top:1.2rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
+                            <span style="font-weight:600; font-size:0.95rem;">Miembros de la finca</span>
+                            <span id="finca-miembros-count" style="font-size:0.8rem; opacity:0.75;"></span>
+                        </div>
+                        <div id="finca-miembros" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
+                    </div>
                 </div>
 
                 <div class="stats-grid">
@@ -228,33 +261,33 @@
                     <form id="form-animal">
                         <div class="form-row">
                             <div class="form-group">
-                                <label>Código Único</label>
+                                <label>Código Único <span style="color:var(--danger)">*</span></label>
                                 <input type="text" id="animal-codigo" required placeholder="Ej: BOV-2024-001">
                             </div>
                             <div class="form-group">
-                                <label>Especie</label>
+                                <label>Especie <span style="color:var(--danger)">*</span></label>
                                 <input type="text" id="animal-especie" required placeholder="Ej: Bovino">
                             </div>
                         </div>
                         <div class="form-row">
                             <div class="form-group">
-                                <label>Raza</label>
-                                <input type="text" id="animal-raza" placeholder="Ej: Brahman">
+                                <label>Raza <span style="color:var(--danger)">*</span></label>
+                                <input type="text" id="animal-raza" required placeholder="Ej: Brahman">
                             </div>
                             <div class="form-group">
-                                <label>Nombre</label>
-                                <input type="text" id="animal-nombre" placeholder="Ej: Luna">
+                                <label>Nombre <span style="color:var(--danger)">*</span></label>
+                                <input type="text" id="animal-nombre" required placeholder="Ej: Luna">
                             </div>
                         </div>
                         <div class="form-row">
                             <div class="form-group">
-                                <label>Fecha de nacimiento</label>
-                                <input type="date" id="animal-fecha">
+                                <label>Fecha de nacimiento <span style="color:var(--danger)">*</span></label>
+                                <input type="date" id="animal-fecha" required>
                             </div>
                             <div class="form-group">
-                                <label>Sexo</label>
-                                <select id="animal-sexo">
-                                    <option value="">Sin especificar</option>
+                                <label>Sexo <span style="color:var(--danger)">*</span></label>
+                                <select id="animal-sexo" required>
+                                    <option value="">Seleccionar...</option>
                                     <option value="M">Macho</option>
                                     <option value="H">Hembra</option>
                                     <option value="I">Indeterminado</option>
@@ -263,12 +296,12 @@
                         </div>
                         <div class="form-row">
                             <div class="form-group">
-                                <label>Peso (kg)</label>
-                                <input type="number" id="animal-peso" step="0.01" placeholder="Ej: 350.5">
+                                <label>Peso (kg) <span style="color:var(--danger)">*</span></label>
+                                <input type="number" id="animal-peso" step="0.01" min="0.01" required placeholder="Ej: 350.5">
                             </div>
                             <div class="form-group">
-                                <label>Color</label>
-                                <input type="text" id="animal-color" placeholder="Ej: Blanco con manchas">
+                                <label>Color <span style="color:var(--danger)">*</span></label>
+                                <input type="text" id="animal-color" required placeholder="Ej: Blanco con manchas">
                             </div>
                         </div>
                         <div class="form-group">
@@ -277,25 +310,37 @@
                         </div>
 
                         <h4 style="color:var(--primary-dark); margin: 1.5rem 0 0.5rem;">Trazabilidad Genealógica</h4>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>Madre</label>
-                                <select id="animal-madre">
-                                    <option value="">Sin registrar</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Padre</label>
-                                <select id="animal-padre">
-                                    <option value="">Sin registrar</option>
-                                </select>
-                            </div>
-                        </div>
                         <div class="form-group">
                             <label>
-                                <input type="checkbox" id="animal-inseminada" style="width:auto; margin-right:0.5rem;">
-                                Nacida por inseminación artificial
+                                <input type="checkbox" id="animal-origen-desconocido" style="width:auto; margin-right:0.5rem;" onchange="toggleOrigenDesconocido(this.checked)">
+                                Se desconoce el origen del animal
                             </label>
+                        </div>
+                        <div id="campos-genealogicos">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Madre</label>
+                                    <select id="animal-madre">
+                                        <option value="">Sin registrar</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" id="campo-padre">
+                                    <label>Padre</label>
+                                    <select id="animal-padre">
+                                        <option value="">Sin registrar</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="animal-inseminada" style="width:auto; margin-right:0.5rem;" onchange="togglePadreField(this.checked)">
+                                    Nacida por inseminación artificial
+                                </label>
+                            </div>
+                            <div class="form-group" id="campo-pajilla" style="display:none;">
+                                <label>Información de la pajilla</label>
+                                <input type="text" id="animal-pajilla" placeholder="Ej: código, lote, proveedor, raza del semental...">
+                            </div>
                         </div>
 
                         <div class="form-actions">
@@ -406,15 +451,6 @@
                                 <label>Tipo de evento</label>
                                 <select id="event-tipo" required onchange="updateEventFields()">
                                     <option value="">Seleccionar tipo...</option>
-                                    <option value="nacimiento">Nacimiento</option>
-                                    <option value="vacunacion">Vacunación</option>
-                                    <option value="desparacitacion">Desparasitación</option>
-                                    <option value="traslado">Traslado</option>
-                                    <option value="cambio_propietario">Cambio de propietario</option>
-                                    <option value="certificacion_sanitaria">Certificación sanitaria</option>
-                                    <option value="muerte">Muerte</option>
-                                    <option value="venta">Venta</option>
-                                    <option value="auditoria">Auditoría</option>
                                 </select>
                             </div>
                         </div>
@@ -588,10 +624,10 @@
                 <h2>Auditoría y Consulta</h2>
 
                 <div class="tabs">
-                    <button class="tab-btn active" onclick="showAuditTab('audit-history')">Historial Animal</button>
-                    <button class="tab-btn" onclick="showAuditTab('audit-integrity')">Integridad</button>
-                    <button class="tab-btn audit-only-tab" onclick="showAuditTab('audit-log')">Bitácora</button>
-                    <button class="tab-btn audit-only-tab" onclick="showAuditTab('audit-alerts')">Alertas</button>
+                    <button class="tab-btn active" onclick="showAuditTab(this, 'audit-history')">Historial Animal</button>
+                    <button class="tab-btn" onclick="showAuditTab(this, 'audit-integrity')">Integridad</button>
+                    <button class="tab-btn" onclick="showAuditTab(this, 'audit-log')">Bitácora</button>
+                    <button class="tab-btn" onclick="showAuditTab(this, 'audit-alerts')">Alertas</button>
                 </div>
 
                 <div id="audit-history" class="audit-tab active">
@@ -619,8 +655,125 @@
                     <div id="alerts-list" class="table-container"></div>
                 </div>
             </div>
+
+            <!-- ── Usuarios por Finca (Admin) ── -->
+            <div id="section-users" class="section">
+                <div class="section-header">
+                    <h2 id="users-section-title">Usuarios de la finca</h2>
+                </div>
+                <div id="users-finca-container">
+                    <p class="text-muted">Cargando...</p>
+                </div>
+            </div>
         </main>
     </section>
+
+    <!-- ══════════ Modal: Cambio de Credencial Biométrica ══════════ -->
+    <div id="modal-cambio-bio" class="modal-overlay hidden" onclick="cerrarModalCambioBio(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <button class="modal-close" onclick="cerrarModalCambioBio()">&times;</button>
+            <h3 id="modal-cambio-bio-titulo">Cambiar Credencial Biométrica</h3>
+
+            <!-- Paso 1: Solicitar código -->
+            <div id="cambio-paso-1">
+                <p id="cambio-paso-1-desc"></p>
+                <p class="text-muted" style="font-size:0.9rem;">
+                    Se enviará un código de verificación a tu correo electrónico registrado.
+                    El código es válido por <strong>10 minutos</strong>.
+                </p>
+                <div id="cambio-paso-1-error" class="alert alert-error hidden"></div>
+                <button class="btn btn-primary btn-full" onclick="solicitarCodigoCambio()">
+                    📧 Enviar código a mi correo
+                </button>
+            </div>
+
+            <!-- Paso 2: Ingresar código + capturar nueva credencial -->
+            <div id="cambio-paso-2" class="hidden">
+                <p>Ingresa el código de <strong>6 dígitos</strong> que recibiste en
+                   <span id="cambio-email-destino" style="color:var(--primary-dark);font-weight:600;"></span>:
+                </p>
+
+                <div class="form-group">
+                    <input
+                        type="text"
+                        id="cambio-codigo-input"
+                        class="form-input codigo-input"
+                        maxlength="6"
+                        placeholder="_ _ _ _ _ _"
+                        inputmode="numeric"
+                        pattern="[0-9]{6}"
+                    >
+                </div>
+
+                <!-- Captura: Firma -->
+                <div id="cambio-firma-capture" class="hidden">
+                    <p>Dibuja tu nueva firma:</p>
+                    <canvas id="cambio-signature-canvas" width="460" height="180"></canvas>
+                    <div class="canvas-controls">
+                        <button class="btn btn-sm btn-outline" onclick="limpiarCambioFirma()">Borrar</button>
+                    </div>
+                </div>
+
+                <!-- Captura: Rostro -->
+                <div id="cambio-rostro-capture" class="hidden">
+                    <p>Posiciona tu rostro frente a la cámara y captura:</p>
+                    <div class="camera-container">
+                        <video id="cambio-face-video" autoplay playsinline></video>
+                        <canvas id="cambio-face-canvas" class="hidden"></canvas>
+                    </div>
+                    <div id="cambio-face-preview" class="hidden">
+                        <img id="cambio-face-preview-img" alt="Vista previa">
+                    </div>
+                    <div class="canvas-controls">
+                        <button class="btn btn-sm btn-primary" id="btn-cambio-capture-face" onclick="capturarCambioRostro()">
+                            Capturar foto
+                        </button>
+                        <button class="btn btn-sm btn-outline hidden" id="btn-cambio-retry-face" onclick="reintentarCambioRostro()">
+                            Reintentar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Captura: Voz -->
+                <div id="cambio-voz-capture" class="hidden">
+                    <p>Graba tu nueva muestra de voz (di: <em>"Mi voz es mi contraseña"</em>):</p>
+                    <div class="voice-container">
+                        <div id="cambio-voice-indicator" class="voice-indicator">
+                            <div class="voice-circle"></div>
+                            <span id="cambio-voice-status">Listo para grabar</span>
+                        </div>
+                        <audio id="cambio-voice-playback" controls class="hidden"></audio>
+                    </div>
+                    <div class="canvas-controls">
+                        <button class="btn btn-sm btn-primary" id="btn-cambio-record-voice" onclick="toggleCambioVozRecording()">
+                            🎙️ Grabar voz
+                        </button>
+                    </div>
+                </div>
+
+                <div id="cambio-paso-2-error" class="alert alert-error hidden"></div>
+
+                <div style="display:flex;gap:8px;margin-top:16px;">
+                    <button class="btn btn-outline" onclick="volverPaso1CambioBio()" style="flex:1">
+                        ← Reenviar código
+                    </button>
+                    <button class="btn btn-primary" onclick="confirmarCambioBio()" style="flex:2">
+                        ✅ Confirmar cambio
+                    </button>
+                </div>
+            </div>
+
+            <!-- Paso 3: Éxito -->
+            <div id="cambio-paso-3" class="hidden" style="text-align:center;padding:16px 0;">
+                <div style="font-size:3rem;">✅</div>
+                <h4 style="color:var(--success);margin:12px 0 8px;">¡Credencial actualizada!</h4>
+                <p id="cambio-paso-3-msg"></p>
+                <button class="btn btn-primary" onclick="cerrarModalCambioBio()" style="margin-top:16px;">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
 
     <script src="js/app.js"></script>
     <script src="js/auth.js"></script>
@@ -629,16 +782,6 @@
     <script src="js/events.js"></script>
     <script src="js/biometrics.js"></script>
     <script src="js/audit.js"></script>
-
-    <!-- Registro del Service Worker (PWA) -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('SW registrado:', reg.scope))
-            .catch(err => console.warn('SW falló:', err));
-        });
-      }
-    </script>
+    <script src="js/users_admin.js"></script>
 </body>
 </html>

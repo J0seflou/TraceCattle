@@ -53,7 +53,7 @@ const EVENT_FIELDS = {
 
 async function loadAnimalsForSelect() {
     try {
-        const res = await apiFetch('/animales');
+        const res = await apiFetch('/animales/');
         if (!res.ok) return;
         const animals = await res.json();
         const select = document.getElementById('event-animal');
@@ -81,6 +81,47 @@ function updateEventFields() {
 }
 
 // ── Validación biométrica ──
+
+function retryBiometricStep(llave) {
+    document.getElementById('event-result').classList.add('hidden');
+    document.getElementById('event-biometric-steps').classList.remove('hidden');
+    document.getElementById('event-step-submit').classList.add('hidden');
+
+    if (llave === 'firma') {
+        eventState.signatureData = null;
+        document.getElementById('event-step-1').classList.remove('hidden');
+        document.getElementById('event-step-2').classList.add('hidden');
+        document.getElementById('event-step-3').classList.add('hidden');
+        document.querySelectorAll('.step').forEach(s => s.classList.remove('active', 'failed'));
+        document.getElementById('step-firma-indicator').classList.add('active');
+        initSignatureCanvas('signature-canvas');
+    } else if (llave === 'rostro') {
+        eventState.faceData = null;
+        document.getElementById('event-step-1').classList.add('hidden');
+        document.getElementById('event-step-2').classList.remove('hidden');
+        document.getElementById('event-step-3').classList.add('hidden');
+        document.getElementById('face-preview').classList.add('hidden');
+        document.getElementById('btn-capture-face').classList.remove('hidden');
+        document.getElementById('btn-retry-face').classList.add('hidden');
+        document.getElementById('btn-confirm-face').classList.add('hidden');
+        document.querySelectorAll('.step').forEach(s => s.classList.remove('active', 'failed'));
+        document.getElementById('step-rostro-indicator').classList.add('active');
+        startCamera();
+    } else if (llave === 'voz') {
+        eventState.voiceData = null;
+        document.getElementById('event-step-1').classList.add('hidden');
+        document.getElementById('event-step-2').classList.add('hidden');
+        document.getElementById('event-step-3').classList.remove('hidden');
+        document.getElementById('voice-playback').classList.add('hidden');
+        document.getElementById('btn-confirm-voice').classList.add('hidden');
+        document.getElementById('voice-status').textContent = 'Listo para grabar';
+        document.getElementById('btn-record-voice').textContent = 'Grabar';
+        document.querySelectorAll('.step').forEach(s => s.classList.remove('active', 'failed'));
+        document.getElementById('step-voz-indicator').classList.add('active');
+    } else {
+        startBiometricValidation();
+    }
+}
 
 function startBiometricValidation() {
     const animalId = document.getElementById('event-animal').value;
@@ -264,19 +305,23 @@ async function startVoiceRecording() {
             if (e.data.size > 0) audioChunks.push(e.data);
         };
 
-        mediaRecorder.onstop = () => {
-            const blob = new Blob(audioChunks, { type: 'audio/webm' });
-            const url = URL.createObjectURL(blob);
-            const playback = document.getElementById('voice-playback');
-            playback.src = url;
-            playback.classList.remove('hidden');
+        mediaRecorder.onstop = async () => {
+            const webmBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            try {
+                const wavBlob = await _webmBlobToWavBlob(webmBlob);
+                const url = URL.createObjectURL(wavBlob);
+                const playback = document.getElementById('voice-playback');
+                playback.src = url;
+                playback.classList.remove('hidden');
 
-            // Convertir a base64
-            const reader = new FileReader();
-            reader.onload = () => {
-                eventState.voiceData = reader.result.split(',')[1];
-            };
-            reader.readAsDataURL(blob);
+                const reader = new FileReader();
+                reader.onload = () => {
+                    eventState.voiceData = reader.result.split(',')[1];
+                };
+                reader.readAsDataURL(wavBlob);
+            } catch (e) {
+                showToast('Error al procesar el audio', 'error');
+            }
 
             document.getElementById('btn-confirm-voice').classList.remove('hidden');
             stream.getTracks().forEach(t => t.stop());
@@ -355,68 +400,164 @@ async function submitEvent() {
         audio_voz: eventState.voiceData,
     };
 
+    const resultDiv = document.getElementById('event-result');
+    let res, data;
+    const tiempoEnvio = new Date();
+
     try {
         showToast('Procesando validación biométrica y registro...', 'info');
-        const res = await apiFetch('/eventos/', {
+        res = await apiFetch('/eventos/', {
             method: 'POST',
             body: JSON.stringify(body),
         });
-        const data = await res.json();
-        const resultDiv = document.getElementById('event-result');
-        resultDiv.classList.remove('hidden');
+    } catch (err) {
+        // La conexión se cortó, pero el servidor puede haber completado el proceso.
+        // Esperamos 4 segundos y verificamos si el evento fue creado.
+        showToast('Verificando resultado en el servidor...', 'info');
+        await new Promise(r => setTimeout(r, 4000));
+        try {
+            const checkRes = await apiFetch(`/eventos/?animal_id=${body.id_animales}`);
+            if (checkRes.ok) {
+                const eventos = await checkRes.json();
+                const eventoCreado = eventos.find(e => {
+                    const fechaEvento = new Date(e.registrado_en);
+                    return e.tipo_evento === body.tipo_evento &&
+                           (fechaEvento - tiempoEnvio) > -5000; // creado cerca del momento del envío
+                });
+                if (eventoCreado) {
+                    document.getElementById('event-step-submit').classList.add('hidden');
+                    showToast('Evento registrado exitosamente', 'success');
+                    loadRecentEvents();
+                    resultDiv.innerHTML = `
+                        <div class="event-result-success">
+                            <h4>✅ Evento registrado exitosamente</h4>
+                            <p>Las 3 llaves biométricas fueron aprobadas y el evento fue guardado.</p>
+                            <div class="mt-1">
+                                <strong>Hash del evento:</strong>
+                                <div class="hash-display">${eventoCreado.hash_evento}</div>
+                            </div>
+                            <div class="mt-1">
+                                <button class="btn btn-primary" onclick="resetEventFlow()">Registrar otro evento</button>
+                            </div>
+                        </div>
+                    `;
+                    resultDiv.classList.remove('hidden');
+                    return;
+                }
+            }
+        } catch (_) { /* si falla la verificación, mostrar error original */ }
+        showToast('Error de conexión con el servidor', 'error');
+        return;
+    }
 
-        if (res.ok) {
+    // Intentar parsear JSON; si falla, usar el código HTTP para determinar éxito
+    try {
+        const text = await res.text();
+        data = JSON.parse(text);
+    } catch (parseErr) {
+        // La respuesta no es JSON válido — determinar resultado por código HTTP
+        document.getElementById('event-step-submit').classList.add('hidden');
+        if (res.status === 201 || res.status === 200) {
+            showToast('Evento registrado exitosamente', 'success');
+            loadRecentEvents();
             resultDiv.innerHTML = `
                 <div class="event-result-success">
                     <h4>\u2705 Evento registrado exitosamente</h4>
-                    <p>${data.mensaje}</p>
+                    <p>Las 3 llaves biométricas fueron aprobadas y el evento fue guardado.</p>
+                    <div class="mt-1">
+                        <button class="btn btn-primary" onclick="resetEventFlow()">Registrar otro evento</button>
+                    </div>
+                </div>
+            `;
+            resultDiv.classList.remove('hidden');
+        } else {
+            showToast(`Error ${res.status} al registrar evento`, 'error');
+        }
+        return;
+    }
+
+    document.getElementById('event-step-submit').classList.add('hidden');
+
+    if (res.ok) {
+        // Mostrar éxito de inmediato y actualizar lista
+        showToast('Evento registrado con triple validación biométrica', 'success');
+        loadRecentEvents();
+
+        // Renderizar detalles del evento registrado
+        try {
+            const scoresFirma = data.validacion_biometrica ? (data.validacion_biometrica.score_firma * 100).toFixed(1) : 'N/A';
+            const scoresRostro = data.validacion_biometrica ? (data.validacion_biometrica.score_rostro * 100).toFixed(1) : 'N/A';
+            const scoresVoz = data.validacion_biometrica ? (data.validacion_biometrica.score_voz * 100).toFixed(1) : 'N/A';
+            const hashEvento = data.evento ? data.evento.hash_evento : '';
+            const hashAnterior = data.evento ? (data.evento.hash_evento_pasado || 'GENESIS (primer evento)') : '';
+            const firmaDigital = data.evento ? data.evento.firma_digital : '';
+
+            resultDiv.innerHTML = `
+                <div class="event-result-success">
+                    <h4>\u2705 Evento registrado exitosamente</h4>
+                    <p>${data.mensaje || 'Las 3 llaves biométricas fueron aprobadas.'}</p>
                     <div class="mt-1">
                         <strong>Hash del evento:</strong>
-                        <div class="hash-display">${data.evento.hash_evento}</div>
+                        <div class="hash-display">${hashEvento}</div>
                     </div>
                     <div class="mt-1">
                         <strong>Hash anterior:</strong>
-                        <div class="hash-display">${data.evento.hash_evento_pasado || 'GENESIS (primer evento)'}</div>
+                        <div class="hash-display">${hashAnterior}</div>
                     </div>
                     <div class="mt-1">
                         <strong>Firma digital:</strong>
-                        <div class="hash-display">${data.evento.firma_digital}</div>
+                        <div class="hash-display">${firmaDigital}</div>
                     </div>
                     <div class="validation-items mt-1">
                         <div class="validation-item success">
                             <span class="val-icon">\u2705</span>
-                            Firma: Score ${(data.validacion_biometrica.score_firma * 100).toFixed(1)}%
+                            Firma: Score ${scoresFirma}%
                         </div>
                         <div class="validation-item success">
                             <span class="val-icon">\u2705</span>
-                            Rostro: Score ${(data.validacion_biometrica.score_rostro * 100).toFixed(1)}%
+                            Rostro: Score ${scoresRostro}%
                         </div>
                         <div class="validation-item success">
                             <span class="val-icon">\u2705</span>
-                            Voz: Score ${(data.validacion_biometrica.score_voz * 100).toFixed(1)}%
+                            Voz: Score ${scoresVoz}%
                         </div>
+                    </div>
+                    <div class="mt-1">
+                        <button class="btn btn-primary" onclick="resetEventFlow()">Registrar otro evento</button>
                     </div>
                 </div>
             `;
-            showToast('Evento registrado con triple validación', 'success');
-            loadRecentEvents();
-        } else {
-            const detail = typeof data.detail === 'object' ? data.detail : { mensaje: data.detail };
+            resultDiv.classList.remove('hidden');
+        } catch (renderErr) {
+            // Si falla el render de detalles, al menos mostrar mensaje simple
             resultDiv.innerHTML = `
-                <div class="event-result-error">
-                    <h4>\u274C Registro denegado</h4>
-                    <p>${detail.mensaje || data.detail}</p>
-                    ${detail.llave_fallida ? `<p><strong>Llave fallida:</strong> ${detail.llave_fallida}</p>` : ''}
-                    ${detail.score !== undefined ? `<p><strong>Score:</strong> ${(detail.score * 100).toFixed(1)}%</p>` : ''}
+                <div class="event-result-success">
+                    <h4>\u2705 Evento registrado exitosamente</h4>
+                    <p>Las 3 llaves biométricas fueron aprobadas y el evento fue guardado.</p>
+                    <div class="mt-1">
+                        <button class="btn btn-primary" onclick="resetEventFlow()">Registrar otro evento</button>
+                    </div>
                 </div>
             `;
-            showToast('Validación biométrica rechazada', 'error');
+            resultDiv.classList.remove('hidden');
         }
-
-        // Reset para siguiente evento
-        document.getElementById('event-step-submit').classList.add('hidden');
-    } catch (err) {
-        showToast('Error de conexión', 'error');
+    } else {
+        const detail = typeof data.detail === 'object' ? data.detail : { mensaje: data.detail };
+        const llave = detail.llave_fallida || null;
+        resultDiv.innerHTML = `
+            <div class="event-result-error">
+                <h4>\u274C Registro denegado</h4>
+                <p>${detail.mensaje || data.detail}</p>
+                ${llave ? `<p><strong>Llave fallida:</strong> ${llave}</p>` : ''}
+                ${detail.score !== undefined ? `<p><strong>Score obtenido:</strong> ${(detail.score * 100).toFixed(1)}% &mdash; <strong>M&iacute;nimo requerido:</strong> ${((detail.umbral || 0) * 100).toFixed(0)}%</p>` : ''}
+                <div class="mt-1" style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    <button class="btn btn-primary" onclick="retryBiometricStep('${llave}')">Reintentar ${llave ? llave : 'biometr\u00EDa'}</button>
+                    <button class="btn btn-outline" onclick="startBiometricValidation()">Reiniciar desde el inicio</button>
+                </div>
+            </div>
+        `;
+        resultDiv.classList.remove('hidden');
+        showToast('Validación biométrica rechazada', 'error');
     }
 }
 
@@ -424,7 +565,7 @@ async function submitEvent() {
 
 async function loadRecentEvents() {
     try {
-        const res = await apiFetch('/eventos');
+        const res = await apiFetch('/eventos/');
         if (!res.ok) return;
         const events = await res.json();
         renderEventsList(events);

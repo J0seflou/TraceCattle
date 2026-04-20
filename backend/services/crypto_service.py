@@ -1,18 +1,74 @@
 """
-Servicio criptográfico: SHA-256 hashing, ECDSA signing, encadenamiento de eventos.
+Servicio criptográfico: AES-256-GCM, SHA-256 hashing, ECDSA signing, encadenamiento de eventos.
 """
 import hashlib
 import json
+import os
 from datetime import datetime
 from uuid import UUID
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature, encode_dss_signature
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.exceptions import InvalidSignature
 
 from sqlalchemy.orm import Session
 from backend.models.models import EventoGanadero
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  AES-256-GCM: cifrado simétrico autenticado para datos biométricos sensibles
+# ─────────────────────────────────────────────────────────────────────────────
+
+def encrypt_aes256(data: bytes, key: bytes) -> bytes:
+    """
+    Cifra datos con AES-256-GCM (cifrado autenticado).
+
+    Formato del resultado: nonce (12 bytes) || ciphertext+tag
+    El nonce aleatorio garantiza que el mismo dato produce cifrados distintos.
+    La etiqueta GCM (16 bytes) detecta cualquier manipulación del cifrado.
+
+    Args:
+        data: Bytes a cifrar (plantilla biométrica).
+        key:  Clave AES-256 de exactamente 32 bytes.
+
+    Returns:
+        Bytes cifrados listos para almacenar en la BD.
+    """
+    if len(key) != 32:
+        raise ValueError("La clave AES-256 debe tener exactamente 32 bytes.")
+    nonce = os.urandom(12)          # 96 bits, recomendado por NIST para GCM
+    aesgcm = AESGCM(key)
+    ciphertext = aesgcm.encrypt(nonce, data, None)  # incluye tag de 16 bytes al final
+    return nonce + ciphertext
+
+
+def decrypt_aes256(data: bytes, key: bytes) -> bytes:
+    """
+    Descifra y verifica la integridad de datos cifrados con AES-256-GCM.
+
+    Args:
+        data: Bytes cifrados (nonce || ciphertext+tag).
+        key:  Clave AES-256 de exactamente 32 bytes.
+
+    Returns:
+        Bytes originales descifrados.
+
+    Raises:
+        ValueError: Si los datos están corruptos o la clave es incorrecta.
+    """
+    if len(key) != 32:
+        raise ValueError("La clave AES-256 debe tener exactamente 32 bytes.")
+    if len(data) < 28:  # 12 nonce + 16 tag mínimo
+        raise ValueError("Datos cifrados inválidos: longitud insuficiente.")
+    nonce = data[:12]
+    ciphertext = data[12:]
+    aesgcm = AESGCM(key)
+    try:
+        return aesgcm.decrypt(nonce, ciphertext, None)
+    except Exception:
+        raise ValueError("Error al descifrar: datos corruptos o clave incorrecta.")
 
 
 def generate_event_hash(

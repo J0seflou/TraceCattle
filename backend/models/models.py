@@ -78,7 +78,6 @@ class User(Base):
     email = Column(String(150), nullable=False, unique=True)
     contrasena_hash = Column(Text, nullable=False)
     telefono = Column(String(20))
-    numero_senasa = Column(String(50), nullable=True)
     activo = Column(Boolean, nullable=False, default=True)
     creado_en = Column(DateTime, nullable=False, default=datetime.utcnow)
     actualizado_en = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -127,6 +126,8 @@ class Animal(Base):
     madre_id = Column(UUID(as_uuid=True), ForeignKey("animales.id_animales"), nullable=True)
     padre_id = Column(UUID(as_uuid=True), ForeignKey("animales.id_animales"), nullable=True)
     es_inseminada = Column(Boolean, nullable=False, default=False)
+    info_pajilla = Column(Text, nullable=True)
+    origen_desconocido = Column(Boolean, nullable=False, default=False)
     activo = Column(Boolean, nullable=False, default=True)
     registrado_en = Column(DateTime, nullable=False, default=datetime.utcnow)
     actualizado_en = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -170,21 +171,6 @@ class EventoGanadero(Base):
     validacion = relationship("ValidacionBiometrica", back_populates="evento", uselist=False)
 
 
-class CodigoCambioBiometrico(Base):
-    """Códigos temporales de verificación para cambiar credenciales biométricas."""
-    __tablename__ = "codigos_cambio_biometrico"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    id_users = Column(UUID(as_uuid=True), ForeignKey("users.id_users", ondelete="CASCADE"), nullable=False)
-    codigo = Column(String(6), nullable=False)
-    tipo_credencial = Column(String(10), nullable=False)  # "firma", "rostro", "voz"
-    usado = Column(Boolean, nullable=False, default=False)
-    expira_en = Column(DateTime, nullable=False)
-    creado_en = Column(DateTime, nullable=False, default=datetime.utcnow)
-
-    user = relationship("User")
-
-
 class ValidacionBiometrica(Base):
     __tablename__ = "validaciones_biometricas"
 
@@ -204,6 +190,21 @@ class ValidacionBiometrica(Base):
     evento = relationship("EventoGanadero", back_populates="validacion")
 
 
+class CodigoCambioBiometrico(Base):
+    """Códigos temporales de verificación para cambiar credenciales biométricas."""
+    __tablename__ = "codigos_cambio_biometrico"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_users = Column(UUID(as_uuid=True), ForeignKey("users.id_users", ondelete="CASCADE"), nullable=False)
+    codigo = Column(String(6), nullable=False)
+    tipo_credencial = Column(String(10), nullable=False)  # "firma", "rostro", "voz"
+    usado = Column(Boolean, nullable=False, default=False)
+    expira_en = Column(DateTime, nullable=False)
+    creado_en = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    user = relationship("User")
+
+
 class BitacoraSistema(Base):
     __tablename__ = "bitacora_sistema"
 
@@ -216,3 +217,24 @@ class BitacoraSistema(Base):
     ocurrido_en = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     user = relationship("User", back_populates="bitacoras")
+
+
+class AuditorAutorizado(Base):
+    """
+    Catálogo de auditores habilitados por SENASA.
+    Solo los carnés registrados aquí pueden crear cuentas con rol 'auditor'.
+    """
+    __tablename__ = "auditores_autorizados"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    carnet_senasa = Column(String(30), nullable=False, unique=True, index=True)
+    nombre_completo = Column(String(200), nullable=False)
+    activo = Column(Boolean, nullable=False, default=True)
+    # Referencia al usuario ya registrado con este carné (None = carné disponible)
+    id_user_registrado = Column(UUID(as_uuid=True), ForeignKey("users.id_users", ondelete="SET NULL"), nullable=True, unique=True)
+    registrado_en = Column(DateTime, nullable=False, default=datetime.utcnow)
+    actualizado_en = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    agregado_por = Column(UUID(as_uuid=True), ForeignKey("users.id_users", ondelete="SET NULL"), nullable=True)
+
+    user_registrado = relationship("User", foreign_keys=[id_user_registrado])
+    user_agregado_por = relationship("User", foreign_keys=[agregado_por])

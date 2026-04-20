@@ -27,7 +27,15 @@ def search_animals(
     current_user: User = Depends(get_current_user),
 ):
     """Buscar animales por múltiples criterios."""
-    query = db.query(Animal)
+    rol_nombre = current_user.rol.nombre if current_user.rol else ""
+
+    # Solo admin ve todos; los demás están limitados a su finca
+    if rol_nombre == "admin":
+        query = db.query(Animal)
+    else:
+        if not current_user.finca_id:
+            return []
+        query = db.query(Animal).filter(Animal.finca_id == current_user.finca_id)
 
     if q:
         search_term = f"%{q}%"
@@ -83,7 +91,16 @@ def search_events(
     current_user: User = Depends(get_current_user),
 ):
     """Buscar eventos por múltiples criterios."""
-    query = db.query(EventoGanadero)
+    rol_nombre = current_user.rol.nombre if current_user.rol else ""
+
+    # Solo admin ve todos; los demás están limitados a eventos de animales de su finca
+    if rol_nombre == "admin":
+        query = db.query(EventoGanadero)
+    else:
+        if not current_user.finca_id:
+            return []
+        animal_ids = db.query(Animal.id_animales).filter(Animal.finca_id == current_user.finca_id).subquery()
+        query = db.query(EventoGanadero).filter(EventoGanadero.id_animales.in_(animal_ids))
 
     if tipo_evento:
         query = query.filter(EventoGanadero.tipo_evento == tipo_evento)

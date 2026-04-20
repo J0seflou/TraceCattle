@@ -31,15 +31,25 @@ def get_bitacora(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Consultar bitácora del sistema. Auditores ven todo, otros solo sus propias entradas."""
+    """Consultar bitácora del sistema."""
+    rol_nombre = current_user.rol.nombre if current_user.rol else ""
     query = db.query(BitacoraSistema)
 
-    # If not auditor, restrict to own entries
-    rol_nombre = current_user.rol.nombre if current_user.rol else ""
-    if rol_nombre != "auditor":
+    if rol_nombre == "admin":
+        # Admin ve todo
+        if user_id:
+            query = query.filter(BitacoraSistema.id_user == user_id)
+    elif rol_nombre == "auditor" and current_user.finca_id:
+        # Auditor con finca: ve las entradas de los miembros de su finca
+        miembros_ids = db.query(User.id_users).filter(
+            User.finca_id == current_user.finca_id
+        ).subquery()
+        query = query.filter(BitacoraSistema.id_user.in_(miembros_ids))
+        if user_id:
+            query = query.filter(BitacoraSistema.id_user == user_id)
+    else:
+        # Sin finca o rol sin privilegios: solo sus propias entradas
         query = query.filter(BitacoraSistema.id_user == current_user.id_users)
-    elif user_id:
-        query = query.filter(BitacoraSistema.id_user == user_id)
 
     if accion:
         query = query.filter(BitacoraSistema.accion.ilike(f"%{accion}%"))
@@ -75,9 +85,17 @@ def audit_animal(
     current_user: User = Depends(get_current_user),
 ):
     """Reporte completo de auditoría para un animal."""
+    rol_nombre = current_user.rol.nombre if current_user.rol else ""
     animal = db.query(Animal).filter(Animal.id_animales == animal_id).first()
     if not animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
+
+    # Solo admin tiene acceso total; los demás necesitan finca asignada
+    if rol_nombre != "admin":
+        if not current_user.finca_id:
+            raise HTTPException(status_code=403, detail="No perteneces a ninguna finca")
+        if animal.finca_id and animal.finca_id != current_user.finca_id:
+            raise HTTPException(status_code=403, detail="No tiene acceso a este animal")
 
     owner = db.query(User).filter(User.id_users == animal.propietario_id).first()
 
@@ -116,9 +134,17 @@ def get_alerts(
         .filter(BitacoraSistema.resultado == "rechazado")
     )
 
-    # Non-auditors only see their own alerts
     rol_nombre = current_user.rol.nombre if current_user.rol else ""
-    if rol_nombre != "auditor":
+    if rol_nombre == "admin":
+        pass  # Admin ve todas las alertas
+    elif rol_nombre == "auditor" and current_user.finca_id:
+        # Auditor con finca: alertas de los miembros de su finca
+        miembros_ids = db.query(User.id_users).filter(
+            User.finca_id == current_user.finca_id
+        ).subquery()
+        query = query.filter(BitacoraSistema.id_user.in_(miembros_ids))
+    else:
+        # Sin finca: solo sus propias alertas
         query = query.filter(BitacoraSistema.id_user == current_user.id_users)
 
     entries = query.order_by(BitacoraSistema.ocurrido_en.desc()).limit(limit).all()
@@ -149,18 +175,16 @@ def global_integrity_check(
     """Verificar integridad criptográfica de animales."""
     rol_nombre = current_user.rol.nombre if current_user.rol else ""
 
-    if rol_nombre == "auditor":
-        # Auditor ve todos los animales de su finca
+    if rol_nombre == "admin":
+        animales = db.query(Animal).filter(Animal.activo == True).all()
+    elif current_user.finca_id:
+        # Cualquier rol con finca asignada: animales de su finca
         animales = db.query(Animal).filter(
             Animal.activo == True,
             Animal.finca_id == current_user.finca_id
         ).all()
     else:
-        # Otros roles ven los animales de su finca
-        animales = db.query(Animal).filter(
-            Animal.activo == True,
-            Animal.finca_id == current_user.finca_id
-        ).all()
+        return {"total_animales": 0, "cadenas_integras": 0, "cadenas_con_error": 0, "detalle": []}
 
     resultados = []
     total_ok = 0

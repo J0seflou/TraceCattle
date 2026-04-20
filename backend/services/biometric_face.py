@@ -55,24 +55,23 @@ def _compute_lbp_histogram(image: np.ndarray) -> np.ndarray:
     """
     Calcula un histograma LBP (Local Binary Pattern) simplificado.
     Divide la imagen en regiones y calcula histogramas locales.
+    Implementado con operaciones NumPy vectorizadas para máximo rendimiento.
     """
     h, w = image.shape
     lbp = np.zeros_like(image, dtype=np.uint8)
 
-    # Calcular LBP para cada pixel (excepto bordes)
-    for i in range(1, h - 1):
-        for j in range(1, w - 1):
-            center = image[i, j]
-            code = 0
-            code |= (image[i-1, j-1] >= center) << 7
-            code |= (image[i-1, j] >= center) << 6
-            code |= (image[i-1, j+1] >= center) << 5
-            code |= (image[i, j+1] >= center) << 4
-            code |= (image[i+1, j+1] >= center) << 3
-            code |= (image[i+1, j] >= center) << 2
-            code |= (image[i+1, j-1] >= center) << 1
-            code |= (image[i, j-1] >= center) << 0
-            lbp[i, j] = code
+    # Calcular LBP vectorizado con NumPy (evita el doble bucle Python)
+    center = image[1:-1, 1:-1]
+    lbp[1:-1, 1:-1] = (
+        ((image[0:-2, 0:-2] >= center).astype(np.uint8) << 7) |
+        ((image[0:-2, 1:-1] >= center).astype(np.uint8) << 6) |
+        ((image[0:-2, 2:  ] >= center).astype(np.uint8) << 5) |
+        ((image[1:-1, 2:  ] >= center).astype(np.uint8) << 4) |
+        ((image[2:,   2:  ] >= center).astype(np.uint8) << 3) |
+        ((image[2:,   1:-1] >= center).astype(np.uint8) << 2) |
+        ((image[2:,   0:-2] >= center).astype(np.uint8) << 1) |
+        ((image[1:-1, 0:-2] >= center).astype(np.uint8) << 0)
+    )
 
     # Dividir en 4x4 = 16 regiones y calcular histograma por región
     grid_h, grid_w = 4, 4

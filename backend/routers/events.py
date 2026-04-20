@@ -26,6 +26,7 @@ from backend.services import (
     biometric_face,
     biometric_voice,
 )
+from backend.services.crypto_service import decrypt_aes256
 
 router = APIRouter(prefix="/api/eventos", tags=["Eventos Ganaderos"])
 
@@ -69,6 +70,13 @@ def create_event(
     if not animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
 
+    # V-010: solo admin tiene acceso total; los demás (incluido auditor) necesitan finca asignada
+    if rol_nombre != "admin":
+        if not current_user.finca_id:
+            raise HTTPException(status_code=403, detail="No perteneces a ninguna finca")
+        if animal.finca_id and animal.finca_id != current_user.finca_id:
+            raise HTTPException(status_code=403, detail="No tiene acceso a este animal")
+
     # Verificar que el usuario tiene plantilla biométrica registrada
     plantilla = db.query(PlantillaBiometrica).filter(
         PlantillaBiometrica.id_users == current_user.id_users
@@ -79,6 +87,18 @@ def create_event(
             detail="Debe registrar sus datos biométricos antes de crear eventos",
         )
 
+    # Descifrar plantillas biométricas almacenadas (AES-256-GCM)
+    aes_key = settings.aes_key
+    try:
+        firma_template_dec  = decrypt_aes256(plantilla.firma_manuscrita, aes_key)
+        rostro_template_dec = decrypt_aes256(plantilla.vector_facial,    aes_key)
+        voz_template_dec    = decrypt_aes256(plantilla.patron_voz,       aes_key)
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Error interno al descifrar plantillas biométricas.",
+        )
+
     # ── Paso 2: Validación de firma manuscrita (Llave 1) ──
     try:
         firma_bytes = base64.b64decode(data.firma_imagen)
@@ -86,7 +106,7 @@ def create_event(
         raise HTTPException(status_code=400, detail="Imagen de firma en base64 inválida")
 
     firma_ok, score_firma = biometric_signature.compare_signatures(
-        plantilla.firma_manuscrita, firma_bytes, settings.SIGNATURE_THRESHOLD
+        firma_template_dec, firma_bytes, settings.SIGNATURE_THRESHOLD
     )
 
     if not firma_ok:
@@ -113,7 +133,7 @@ def create_event(
         raise HTTPException(status_code=400, detail="Imagen facial en base64 inválida")
 
     rostro_ok, score_rostro = biometric_face.compare_faces(
-        plantilla.vector_facial, rostro_bytes, settings.FACE_THRESHOLD
+        rostro_template_dec, rostro_bytes, settings.FACE_THRESHOLD
     )
 
     if not rostro_ok:
@@ -140,7 +160,7 @@ def create_event(
         raise HTTPException(status_code=400, detail="Audio de voz en base64 inválido")
 
     voz_ok, score_voz = biometric_voice.compare_voices(
-        plantilla.patron_voz, voz_bytes, settings.VOICE_THRESHOLD
+        voz_template_dec, voz_bytes, settings.VOICE_THRESHOLD
     )
 
     if not voz_ok:
@@ -207,26 +227,27 @@ def create_event(
     db.commit()
     db.refresh(evento)
 
+    firma_str = str(evento.firma_digital) if evento.firma_digital else ""
     return {
         "evento": {
             "id_eventos": str(evento.id_eventos),
             "id_animales": str(evento.id_animales),
-            "tipo_evento": data.tipo_evento,
-            "datos_evento": evento.datos_evento,
-            "ubicacion": evento.ubicacion,
-            "hash_evento": evento.hash_evento,
-            "hash_evento_pasado": evento.hash_evento_pasado,
-            "firma_digital": evento.firma_digital[:50] + "...",
+            "tipo_evento": str(data.tipo_evento),
+            "datos_evento": evento.datos_evento or {},
+            "ubicacion": str(evento.ubicacion) if evento.ubicacion else None,
+            "hash_evento": str(evento.hash_evento),
+            "hash_evento_pasado": str(evento.hash_evento_pasado) if evento.hash_evento_pasado else None,
+            "firma_digital": firma_str[:50] + "..." if len(firma_str) > 50 else firma_str,
             "actor": f"{current_user.nombre} {current_user.apellido}",
             "registrado_en": str(evento.registrado_en),
         },
         "validacion_biometrica": {
-            "firma_ok": firma_ok,
-            "rostro_ok": rostro_ok,
-            "voz_ok": voz_ok,
-            "score_firma": score_firma,
-            "score_rostro": score_rostro,
-            "score_voz": score_voz,
+            "firma_ok": bool(firma_ok),
+            "rostro_ok": bool(rostro_ok),
+            "voz_ok": bool(voz_ok),
+            "score_firma": float(score_firma),
+            "score_rostro": float(score_rostro),
+            "score_voz": float(score_voz),
             "aprobado": True,
         },
         "mensaje": "Evento registrado exitosamente. Las 3 llaves biométricas fueron aprobadas.",
@@ -240,11 +261,29 @@ def list_events(
     tipo_evento: Optional[str] = Query(None),
     fecha_desde: Optional[datetime] = Query(None),
     fecha_hasta: Optional[datetime] = Query(None),
+    finca_id: Optional[UUID] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Listar eventos con filtros."""
-    query = db.query(EventoGanadero)
+    rol_nombre = current_user.rol.nombre if current_user.rol else ""
+
+    # Solo admin ve todos; los demás filtran por animales de su finca
+    if rol_nombre == "admin":
+        if finca_id:
+            animal_ids_admin = db.query(Animal.id_animales).filter(
+                Animal.finca_id == finca_id
+            ).subquery()
+            query = db.query(EventoGanadero).filter(EventoGanadero.id_animales.in_(animal_ids_admin))
+        else:
+            query = db.query(EventoGanadero)
+    else:
+        if not current_user.finca_id:
+            return []
+        animal_ids = db.query(Animal.id_animales).filter(
+            Animal.finca_id == current_user.finca_id
+        ).subquery()
+        query = db.query(EventoGanadero).filter(EventoGanadero.id_animales.in_(animal_ids))
 
     if animal_id:
         query = query.filter(EventoGanadero.id_animales == animal_id)

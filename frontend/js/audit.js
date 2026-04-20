@@ -1,8 +1,8 @@
 /* ══════════ Auditoría y Consulta ══════════ */
 
-function showAuditTab(tabId) {
+function showAuditTab(btn, tabId) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    event.target.classList.add('active');
+    if (btn) btn.classList.add('active');
     document.querySelectorAll('.audit-tab').forEach(t => {
         t.classList.remove('active');
         t.classList.add('hidden');
@@ -19,7 +19,7 @@ function showAuditTab(tabId) {
 
 async function loadAnimalsForAudit() {
     try {
-        const res = await apiFetch('/animales');
+        const res = await apiFetch('/animales/');
         if (!res.ok) return;
         const animals = await res.json();
         const select = document.getElementById('audit-animal-select');

@@ -66,15 +66,24 @@ def update_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Actualizar información de un usuario."""
-    if current_user.id_users != user_id and current_user.rol.nombre != "auditor":
+    """Actualizar información de un usuario (solo el propio usuario o admin)."""
+    rol_nombre = current_user.rol.nombre if current_user.rol else ""
+
+    # V-006: solo el propio usuario o admin pueden editar; auditores no pueden editar cuentas ajenas
+    if current_user.id_users != user_id and rol_nombre != "admin":
         raise HTTPException(status_code=403, detail="No autorizado para editar este usuario")
 
     user = db.query(User).filter(User.id_users == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    update_data = data.model_dump(exclude_unset=True)
+    # Whitelist explícita de campos modificables (evita mass assignment)
+    _ALLOWED_FIELDS = {"nombre", "apellido", "telefono"}
+    update_data = {
+        k: v for k, v in data.model_dump(exclude_unset=True).items()
+        if k in _ALLOWED_FIELDS
+    }
+
     for key, value in update_data.items():
         setattr(user, key, value)
 

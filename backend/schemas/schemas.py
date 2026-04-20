@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Optional, Any
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 
 # ── Fincas ──
@@ -42,8 +42,8 @@ class UserCreate(BaseModel):
     finca_ubicacion: Optional[str] = Field(None, max_length=300)
     # Para otros roles: código de acceso a una finca existente
     codigo_finca: Optional[str] = Field(None, max_length=10)
-    # Para auditores: número de carné SENASA
-    numero_senasa: Optional[str] = Field(None, max_length=50)
+    # Para auditores: carné de identificación SENASA
+    carnet_senasa: Optional[str] = Field(None, max_length=30, description="Carné SENASA obligatorio para registrarse como auditor")
 
 
 class UserLogin(BaseModel):
@@ -81,18 +81,30 @@ class UserUpdate(BaseModel):
 # ── Animales ──
 
 class AnimalCreate(BaseModel):
-    codigo_unico: str = Field(..., max_length=50)
-    especie: str = Field(..., max_length=60)
-    raza: Optional[str] = Field(None, max_length=60)
-    nombre: Optional[str] = Field(None, max_length=60)
-    fecha_nacimiento: Optional[date] = None
-    sexo: Optional[str] = Field(None, pattern="^[MHI]$")
-    peso_kg: Optional[Decimal] = None
-    color: Optional[str] = Field(None, max_length=50)
+    codigo_unico: str = Field(..., min_length=1, max_length=50)
+    especie: str = Field(..., min_length=1, max_length=60)
+    raza: str = Field(..., min_length=1, max_length=60)
+    nombre: str = Field(..., min_length=1, max_length=60)
+    fecha_nacimiento: date = Field(..., description="Fecha de nacimiento obligatoria")
+    sexo: str = Field(..., pattern="^[MHI]$", description="M=Macho, H=Hembra, I=Indefinido")
+    peso_kg: Decimal = Field(..., gt=0, description="Peso en kg obligatorio")
+    color: str = Field(..., min_length=1, max_length=50)
     marcas: Optional[str] = None
     madre_id: Optional[UUID] = None
     padre_id: Optional[UUID] = None
     es_inseminada: Optional[bool] = False
+    info_pajilla: Optional[str] = None
+    origen_desconocido: Optional[bool] = False
+
+    @model_validator(mode="after")
+    def validar_trazabilidad_genealogica(self) -> "AnimalCreate":
+        if not self.origen_desconocido:
+            if self.madre_id is None and self.padre_id is None and not self.es_inseminada:
+                raise ValueError(
+                    "La trazabilidad genealógica es obligatoria: indique la madre, el padre, "
+                    "si es inseminada, o marque 'Origen desconocido'."
+                )
+        return self
 
 
 class AnimalUpdate(BaseModel):
@@ -107,6 +119,8 @@ class AnimalUpdate(BaseModel):
     madre_id: Optional[UUID] = None
     padre_id: Optional[UUID] = None
     es_inseminada: Optional[bool] = None
+    info_pajilla: Optional[str] = None
+    origen_desconocido: Optional[bool] = None
     activo: Optional[bool] = None
 
 
@@ -126,6 +140,8 @@ class AnimalResponse(BaseModel):
     madre_nombre: Optional[str] = None
     padre_nombre: Optional[str] = None
     es_inseminada: bool = False
+    info_pajilla: Optional[str] = None
+    origen_desconocido: bool = False
     hermanos: Optional[list] = None
     propietario_nombre: Optional[str] = None
     activo: bool
@@ -162,7 +178,7 @@ class EventoResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# ── Cambio de credenciales biométricas ──
+# ── Biometría – cambio de credenciales ──
 
 class SolicitarCambioRequest(BaseModel):
     tipo_credencial: str = Field(
@@ -174,7 +190,7 @@ class SolicitarCambioRequest(BaseModel):
 
 class SolicitarCambioResponse(BaseModel):
     mensaje: str
-    email_destino: str
+    email_destino: str  # enmascarado, p.ej. "jo***@gmail.com"
     expira_minutos: int
 
 
@@ -263,6 +279,24 @@ class AlertaBiometricaResponse(BaseModel):
     rol: str
     ip_origen: Optional[str] = None
     detalle: Optional[dict] = None
+
+
+# ── Auditores Autorizados (SENASA) ──
+
+class AuditorAutorizadoCreate(BaseModel):
+    carnet_senasa: str = Field(..., min_length=3, max_length=30, description="Número de carné SENASA")
+    nombre_completo: str = Field(..., min_length=3, max_length=200)
+
+
+class AuditorAutorizadoResponse(BaseModel):
+    id: UUID
+    carnet_senasa: str
+    nombre_completo: str
+    activo: bool
+    disponible: bool  # True si aún no tiene usuario registrado
+    registrado_en: datetime
+
+    model_config = {"from_attributes": True}
 
 
 # Resolver referencia forward

@@ -8,11 +8,35 @@ function showAnimalForm() {
 function hideAnimalForm() {
     document.getElementById('animal-form-container').classList.add('hidden');
     document.getElementById('form-animal').reset();
+    // Restaurar visibilidad de campos genealógicos al cerrar
+    document.getElementById('campos-genealogicos').style.display = 'block';
+    document.getElementById('campo-padre').style.display = 'block';
+    document.getElementById('campo-pajilla').style.display = 'none';
+}
+
+function togglePadreField(inseminadaChecked) {
+    document.getElementById('campo-pajilla').style.display = inseminadaChecked ? 'block' : 'none';
+    if (!inseminadaChecked) {
+        document.getElementById('animal-pajilla').value = '';
+    }
+}
+
+function toggleOrigenDesconocido(checked) {
+    const campos = document.getElementById('campos-genealogicos');
+    campos.style.display = checked ? 'none' : 'block';
+    if (checked) {
+        document.getElementById('animal-madre').value = '';
+        document.getElementById('animal-padre').value = '';
+        document.getElementById('animal-inseminada').checked = false;
+        document.getElementById('campo-pajilla').style.display = 'none';
+        document.getElementById('animal-pajilla').value = '';
+    }
 }
 
 async function loadParentSelects() {
     try {
-        const res = await apiFetch('/animales');
+        const fp = typeof adminFincaParam === 'function' ? adminFincaParam() : '';
+        const res = await apiFetch(`/animales/${fp}`);
         if (!res.ok) return;
         const animals = await res.json();
 
@@ -38,8 +62,13 @@ async function loadParentSelects() {
 
 async function loadAnimals() {
     try {
-        const res = await apiFetch('/animales');
-        if (!res.ok) return;
+        const fp = typeof adminFincaParam === 'function' ? adminFincaParam() : '';
+        const res = await apiFetch(`/animales/${fp}`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            showToast(err.detail || 'Error cargando animales', 'error');
+            return;
+        }
         const animals = await res.json();
         renderAnimalsList(animals);
     } catch (e) {
@@ -50,7 +79,10 @@ async function loadAnimals() {
 function renderAnimalsList(animals) {
     const container = document.getElementById('animals-list');
     if (animals.length === 0) {
-        container.innerHTML = '<p class="text-muted">No hay animales registrados.</p>';
+        const sinFinca = state.user && !state.user.finca;
+        container.innerHTML = sinFinca
+            ? '<p class="text-muted">No perteneces a ninguna finca. No tienes animales visibles.</p>'
+            : '<p class="text-muted">No hay animales registrados.</p>';
         return;
     }
     container.innerHTML = animals.map(a => `
@@ -63,12 +95,15 @@ function renderAnimalsList(animals) {
                 <div><strong>Peso:</strong> ${a.peso_kg ? a.peso_kg + ' kg' : 'N/A'}</div>
                 <div><strong>Propietario:</strong> ${a.propietario_nombre || 'N/A'}</div>
                 <div><strong>Estado:</strong> ${a.activo ? '<span style="color:var(--success)">Activo</span>' : '<span style="color:var(--danger)">Inactivo</span>'}</div>
-                <div><strong>Madre:</strong> ${a.madre_nombre || 'No registrada'}</div>
-                <div><strong>Padre:</strong> ${a.padre_nombre || 'No registrado'}</div>
-                ${a.es_inseminada ? '<div><strong>Inseminada:</strong> Sí</div>' : ''}
+                ${a.origen_desconocido
+                    ? '<div><strong>Origen:</strong> <span style="color:#b45309;">Desconocido</span></div>'
+                    : `<div><strong>Madre:</strong> ${a.madre_nombre || 'No registrada'}</div>
+                       <div><strong>Padre:</strong> ${a.padre_nombre || 'No registrado'}</div>
+                       ${a.es_inseminada ? `<div><strong>Inseminación artificial:</strong> Sí${a.info_pajilla ? ` — <em>${a.info_pajilla}</em>` : ''}</div>` : ''}`
+                }
             </div>
             <div class="animal-actions">
-                <button class="btn btn-sm btn-outline" onclick="viewAnimalHistory('${a.id_animales}')">Ver historial</button>
+                ${state.user && (state.user.rol_nombre === 'auditor' || state.user.rol_nombre === 'admin') ? `<button class="btn btn-sm btn-outline" onclick="viewAnimalHistory('${a.id_animales}')">Ver historial</button>` : ''}
                 <button class="btn btn-sm btn-outline" onclick="viewAnimalDetail('${a.id_animales}')">Ver detalle</button>
             </div>
         </div>
@@ -116,12 +151,14 @@ async function viewAnimalDetail(animalId) {
                         <div><strong>Madre:</strong> ${a.madre_nombre || 'No registrada'}</div>
                         <div><strong>Padre:</strong> ${a.padre_nombre || 'No registrado'}</div>
                         <div><strong>Inseminación artificial:</strong> ${a.es_inseminada ? 'Sí' : 'No'}</div>
+                        ${a.es_inseminada && a.info_pajilla ? `<div><strong>Pajilla:</strong> ${a.info_pajilla}</div>` : ''}
                     </div>
                     ${hermanos_html}
                 </div>
+                ${state.user && (state.user.rol_nombre === 'auditor' || state.user.rol_nombre === 'admin') ? `
                 <div class="mt-1" style="display:flex; gap:0.5rem;">
                     <button class="btn btn-sm btn-primary" onclick="viewAnimalHistory('${a.id_animales}')">Ver historial de eventos</button>
-                </div>
+                </div>` : ''}
             </div>
         `;
     } catch (e) {
@@ -136,7 +173,7 @@ async function viewAnimalHistory(animalId) {
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     document.getElementById('section-audit').classList.add('active');
 
-    showAuditTab('audit-history');
+    showAuditTab(null, 'audit-history');
     await loadAnimalsForAudit();
     document.getElementById('audit-animal-select').value = animalId;
     loadAnimalAudit();
@@ -145,19 +182,33 @@ async function viewAnimalHistory(animalId) {
 document.getElementById('form-animal').addEventListener('submit', async (e) => {
     e.preventDefault();
 
+    const origenDesconocido = document.getElementById('animal-origen-desconocido').checked;
+    const madreId = document.getElementById('animal-madre').value || null;
+    const padreId = document.getElementById('animal-padre').value || null;
+    const esInseminada = document.getElementById('animal-inseminada').checked;
+
+    // Validar trazabilidad genealógica
+    if (!origenDesconocido && !madreId && !padreId && !esInseminada) {
+        showToast('La trazabilidad genealógica es obligatoria: indique la madre, el padre, si es inseminada, o marque "Se desconoce el origen del animal".', 'error');
+        document.getElementById('campos-genealogicos').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+    }
+
     const body = {
-        codigo_unico: document.getElementById('animal-codigo').value,
-        especie: document.getElementById('animal-especie').value,
-        raza: document.getElementById('animal-raza').value || null,
-        nombre: document.getElementById('animal-nombre').value || null,
-        fecha_nacimiento: document.getElementById('animal-fecha').value || null,
-        sexo: document.getElementById('animal-sexo').value || null,
-        peso_kg: document.getElementById('animal-peso').value ? parseFloat(document.getElementById('animal-peso').value) : null,
-        color: document.getElementById('animal-color').value || null,
+        codigo_unico: document.getElementById('animal-codigo').value.trim(),
+        especie: document.getElementById('animal-especie').value.trim(),
+        raza: document.getElementById('animal-raza').value.trim(),
+        nombre: document.getElementById('animal-nombre').value.trim(),
+        fecha_nacimiento: document.getElementById('animal-fecha').value,
+        sexo: document.getElementById('animal-sexo').value,
+        peso_kg: parseFloat(document.getElementById('animal-peso').value),
+        color: document.getElementById('animal-color').value.trim(),
         marcas: document.getElementById('animal-marcas').value || null,
-        madre_id: document.getElementById('animal-madre').value || null,
-        padre_id: document.getElementById('animal-padre').value || null,
-        es_inseminada: document.getElementById('animal-inseminada').checked,
+        madre_id: madreId,
+        padre_id: padreId,
+        es_inseminada: esInseminada,
+        info_pajilla: esInseminada ? (document.getElementById('animal-pajilla').value.trim() || null) : null,
+        origen_desconocido: origenDesconocido,
     };
 
     try {
@@ -170,9 +221,14 @@ document.getElementById('form-animal').addEventListener('submit', async (e) => {
         if (res.ok) {
             showToast('Animal registrado exitosamente', 'success');
             hideAnimalForm();
-            loadAnimals();
+            await loadAnimals();
+            document.getElementById('animals-list').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            loadDashboardStats();
         } else {
-            showToast(data.detail || 'Error al registrar animal', 'error');
+            const msg = Array.isArray(data.detail)
+                ? data.detail.map(d => d.msg).join(', ')
+                : (data.detail || 'Error al registrar animal');
+            showToast(msg, 'error');
         }
     } catch (err) {
         showToast('Error de conexión', 'error');

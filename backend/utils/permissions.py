@@ -7,6 +7,10 @@ ROLE_PERMISSIONS = {
     "veterinario": ["nacimiento", "vacunacion", "desparacitacion", "muerte"],
     "transportista": ["traslado"],
     "auditor": ["auditoria", "certificacion_sanitaria"],
+    "admin": [
+        "nacimiento", "cambio_propietario", "venta", "muerte", "desparacitacion",
+        "vacunacion", "traslado", "certificacion_sanitaria", "auditoria",
+    ],
 }
 
 

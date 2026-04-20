@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.models.models import User, Role, Finca
+from backend.models.models import User, Role, Finca, AuditorAutorizado
 from backend.schemas.schemas import (
     UserCreate, UserLogin, UserResponse, TokenResponse, FincaResponse,
 )
@@ -55,10 +55,37 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(status_code=400, detail="El email ya está registrado")
 
+    # El rol admin está reservado: no se puede registrar mediante este endpoint
+    if user_data.rol_nombre == "admin":
+        raise HTTPException(status_code=403, detail="No se puede registrar con ese rol")
+
     # Buscar rol
     rol = db.query(Role).filter(Role.nombre == user_data.rol_nombre).first()
     if not rol:
         raise HTTPException(status_code=400, detail=f"Rol '{user_data.rol_nombre}' no existe")
+
+    # Validar carné SENASA si el rol es auditor
+    if user_data.rol_nombre == "auditor":
+        if not user_data.carnet_senasa or not user_data.carnet_senasa.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Debe proporcionar su número de carné SENASA para registrarse como auditor"
+            )
+        carnet_normalizado = user_data.carnet_senasa.strip().upper()
+        auditor_autorizado = db.query(AuditorAutorizado).filter(
+            AuditorAutorizado.carnet_senasa == carnet_normalizado,
+            AuditorAutorizado.activo == True,
+        ).first()
+        if not auditor_autorizado:
+            raise HTTPException(
+                status_code=403,
+                detail="La identificación no pertenece a un auditor autorizado por SENASA"
+            )
+        if auditor_autorizado.id_user_registrado is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Este carné SENASA ya tiene una cuenta registrada. Contacte al administrador si cree que es un error"
+            )
 
     finca = None
 
@@ -103,7 +130,6 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
         email=user_data.email,
         contrasena_hash=hash_password(user_data.contrasena),
         telefono=user_data.telefono,
-        numero_senasa=user_data.numero_senasa if user_data.rol_nombre == "auditor" else None,
     )
     db.add(new_user)
     db.flush()
@@ -116,6 +142,16 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
     if finca:
         db.refresh(finca)
+
+    # Marcar el carné SENASA como usado por este usuario
+    if user_data.rol_nombre == "auditor":
+        carnet_normalizado = user_data.carnet_senasa.strip().upper()
+        auditor_autorizado = db.query(AuditorAutorizado).filter(
+            AuditorAutorizado.carnet_senasa == carnet_normalizado
+        ).first()
+        if auditor_autorizado:
+            auditor_autorizado.id_user_registrado = new_user.id_users
+            db.commit()
 
     # Generar token
     token = create_access_token({"sub": str(new_user.id_users)})

@@ -19,13 +19,20 @@ router = APIRouter(prefix="/api/animales", tags=["Animales"])
 def create_animal(
     data: AnimalCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("ganadero")),
+    current_user: User = Depends(require_role("ganadero", "admin")),
 ):
     """Registrar un nuevo animal (solo ganadero)."""
     # Verificar código único
     existing = db.query(Animal).filter(Animal.codigo_unico == data.codigo_unico).first()
     if existing:
         raise HTTPException(status_code=400, detail="Ya existe un animal con ese código único")
+
+    # Si el origen es desconocido, limpiar datos genealógicos
+    origen_desconocido = data.origen_desconocido or False
+    madre_id = None if origen_desconocido else data.madre_id
+    padre_id = None if origen_desconocido else data.padre_id
+    es_inseminada = False if origen_desconocido else (data.es_inseminada or False)
+    info_pajilla = None if (origen_desconocido or not es_inseminada) else (data.info_pajilla or None)
 
     animal = Animal(
         propietario_id=current_user.id_users,
@@ -39,9 +46,11 @@ def create_animal(
         peso_kg=data.peso_kg,
         color=data.color,
         marcas=data.marcas,
-        madre_id=data.madre_id,
-        padre_id=data.padre_id,
-        es_inseminada=data.es_inseminada or False,
+        madre_id=madre_id,
+        padre_id=padre_id,
+        es_inseminada=es_inseminada,
+        info_pajilla=info_pajilla,
+        origen_desconocido=origen_desconocido,
     )
     db.add(animal)
     db.commit()
@@ -72,6 +81,8 @@ def create_animal(
         madre_nombre=madre_nombre,
         padre_nombre=padre_nombre,
         es_inseminada=animal.es_inseminada,
+        info_pajilla=animal.info_pajilla,
+        origen_desconocido=animal.origen_desconocido,
         hermanos=None,
         propietario_nombre=f"{current_user.nombre} {current_user.apellido}",
         activo=animal.activo,
@@ -84,15 +95,23 @@ def list_animals(
     propietario_id: Optional[UUID] = Query(None),
     especie: Optional[str] = Query(None),
     activo: Optional[bool] = Query(None),
+    finca_id: Optional[UUID] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Listar animales con filtros opcionales (solo de la misma finca)."""
-    query = db.query(Animal)
+    rol_nombre = current_user.rol.nombre if current_user.rol else ""
 
-    # Filtrar por finca del usuario
-    if current_user.finca_id:
-        query = query.filter(Animal.finca_id == current_user.finca_id)
+    # Solo admin ve todos los animales del sistema
+    # Auditor y demás roles: solo los animales de su finca asignada
+    if rol_nombre == "admin":
+        query = db.query(Animal)
+        if finca_id:
+            query = query.filter(Animal.finca_id == finca_id)
+    else:
+        if not current_user.finca_id:
+            return []  # Sin finca asignada: lista vacía
+        query = db.query(Animal).filter(Animal.finca_id == current_user.finca_id)
 
     if propietario_id:
         query = query.filter(Animal.propietario_id == propietario_id)
@@ -130,6 +149,8 @@ def list_animals(
             madre_nombre=madre_nombre,
             padre_nombre=padre_nombre,
             es_inseminada=a.es_inseminada,
+            info_pajilla=a.info_pajilla,
+            origen_desconocido=a.origen_desconocido,
             hermanos=None,
             propietario_nombre=f"{owner.nombre} {owner.apellido}" if owner else None,
             activo=a.activo,
@@ -148,6 +169,14 @@ def get_animal(
     animal = db.query(Animal).filter(Animal.id_animales == animal_id).first()
     if not animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
+
+    # V-005: solo admin tiene acceso total; los demás (incluido auditor) están limitados a su finca
+    rol_nombre = current_user.rol.nombre if current_user.rol else ""
+    if rol_nombre != "admin":
+        if not current_user.finca_id:
+            raise HTTPException(status_code=403, detail="No perteneces a ninguna finca")
+        if animal.finca_id and animal.finca_id != current_user.finca_id:
+            raise HTTPException(status_code=403, detail="No tiene acceso a este animal")
 
     owner = db.query(User).filter(User.id_users == animal.propietario_id).first()
 
@@ -194,6 +223,8 @@ def get_animal(
         madre_nombre=madre_nombre,
         padre_nombre=padre_nombre,
         es_inseminada=animal.es_inseminada,
+        info_pajilla=animal.info_pajilla,
+        origen_desconocido=animal.origen_desconocido,
         hermanos=hermanos if hermanos else None,
         propietario_nombre=f"{owner.nombre} {owner.apellido}" if owner else None,
         activo=animal.activo,
@@ -213,9 +244,9 @@ def update_animal(
     if not animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
 
-    # Todos los roles pueden editar animales de su finca
-    if current_user.finca_id and animal.finca_id != current_user.finca_id:
-        raise HTTPException(status_code=403, detail="No puedes editar animales de otra finca")
+    rol_nombre = current_user.rol.nombre if current_user.rol else ""
+    if animal.propietario_id != current_user.id_users and rol_nombre not in ("auditor", "admin"):
+        raise HTTPException(status_code=403, detail="Solo el propietario puede editar este animal")
 
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -268,6 +299,7 @@ def update_animal(
         madre_nombre=madre_nombre,
         padre_nombre=padre_nombre,
         es_inseminada=animal.es_inseminada,
+        origen_desconocido=animal.origen_desconocido,
         hermanos=hermanos if hermanos else None,
         propietario_nombre=f"{owner.nombre} {owner.apellido}" if owner else None,
         activo=animal.activo,
@@ -286,6 +318,14 @@ def get_animal_history(
     if not animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
 
+    # V-005: solo admin tiene acceso total; los demás están limitados a su finca
+    rol_nombre = current_user.rol.nombre if current_user.rol else ""
+    if rol_nombre != "admin":
+        if not current_user.finca_id:
+            raise HTTPException(status_code=403, detail="No perteneces a ninguna finca")
+        if animal.finca_id and animal.finca_id != current_user.finca_id:
+            raise HTTPException(status_code=403, detail="No tiene acceso a este animal")
+
     return event_service.get_animal_history(db, animal_id)
 
 
@@ -299,5 +339,13 @@ def verify_integrity(
     animal = db.query(Animal).filter(Animal.id_animales == animal_id).first()
     if not animal:
         raise HTTPException(status_code=404, detail="Animal no encontrado")
+
+    # V-005: solo admin tiene acceso total; los demás están limitados a su finca
+    rol_nombre = current_user.rol.nombre if current_user.rol else ""
+    if rol_nombre != "admin":
+        if not current_user.finca_id:
+            raise HTTPException(status_code=403, detail="No perteneces a ninguna finca")
+        if animal.finca_id and animal.finca_id != current_user.finca_id:
+            raise HTTPException(status_code=403, detail="No tiene acceso a este animal")
 
     return event_service.verify_animal_integrity(db, animal_id)

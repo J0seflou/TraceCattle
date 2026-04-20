@@ -4,28 +4,27 @@ Utilidades de seguridad: hash de contraseñas, JWT, autenticación.
 from datetime import datetime, timedelta
 from uuid import UUID
 
+import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from backend.config import settings
 from backend.database import get_db
 from backend.models.models import User, Role
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
 def hash_password(password: str) -> str:
     """Genera hash bcrypt de la contraseña."""
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifica contraseña contra hash almacenado."""
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
@@ -33,13 +32,13 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return jwt.encode(to_encode, settings.validated_secret_key, algorithm=settings.ALGORITHM)
 
 
 def decode_token(token: str) -> dict:
     """Decodifica y valida un token JWT."""
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(token, settings.validated_secret_key, algorithms=[settings.ALGORITHM])
         return payload
     except JWTError:
         raise HTTPException(
@@ -71,9 +70,12 @@ def get_current_user(
 
 
 def require_role(*roles: str):
-    """Dependencia de FastAPI: verifica que el usuario tenga uno de los roles requeridos."""
+    """Dependencia de FastAPI: verifica que el usuario tenga uno de los roles requeridos.
+    El rol 'admin' siempre tiene acceso sin importar qué roles se requieran."""
     def role_checker(current_user: User = Depends(get_current_user)):
         user_role = current_user.rol.nombre if current_user.rol else None
+        if user_role == "admin":
+            return current_user
         if user_role not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

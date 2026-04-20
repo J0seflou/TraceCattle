@@ -22,9 +22,31 @@ from backend.schemas.schemas import (
 )
 from backend.utils.security import get_current_user
 from backend.services import biometric_signature, biometric_face, biometric_voice
+from backend.services.crypto_service import encrypt_aes256, decrypt_aes256
 from backend.services.email_service import enviar_codigo_cambio_biometrico
 
 router = APIRouter(prefix="/api/biometria", tags=["Biometría"])
+
+# V-008: límites y tipos MIME permitidos
+_MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
+_ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
+_ALLOWED_AUDIO_TYPES = {"audio/wav", "audio/x-wav", "audio/wave"}
+
+
+async def _read_validated(upload: UploadFile, allowed_types: set, label: str) -> bytes:
+    """Lee un UploadFile validando tipo MIME y tamaño máximo."""
+    if upload.content_type and upload.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tipo de archivo no permitido para {label}. Se esperaba: {', '.join(allowed_types)}",
+        )
+    data = await upload.read()
+    if len(data) > _MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"El archivo {label} supera el límite de 5 MB",
+        )
+    return data
 
 
 @router.post("/registrar", status_code=status.HTTP_201_CREATED)
@@ -51,34 +73,46 @@ async def register_biometrics(
 
     # Procesar firma
     try:
-        firma_bytes = await firma.read()
+        firma_bytes = await _read_validated(firma, _ALLOWED_IMAGE_TYPES, "firma")
         firma_features = biometric_signature.extract_signature_features(firma_bytes)
         firma_template = biometric_signature.encode_template(firma_features)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error procesando firma: {str(e)}")
 
     # Procesar rostro
     try:
-        rostro_bytes = await rostro.read()
+        rostro_bytes = await _read_validated(rostro, _ALLOWED_IMAGE_TYPES, "rostro")
         rostro_embedding = biometric_face.extract_face_embedding(rostro_bytes)
         rostro_template = biometric_face.encode_template(rostro_embedding)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error procesando rostro: {str(e)}")
 
     # Procesar voz
     try:
-        voz_bytes = await voz.read()
+        voz_bytes = await _read_validated(voz, _ALLOWED_AUDIO_TYPES, "voz")
         voz_features = biometric_voice.extract_voice_features(voz_bytes)
         voz_template = biometric_voice.encode_template(voz_features)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error procesando voz: {str(e)}")
 
-    # Guardar plantilla
+    # Cifrar plantillas con AES-256-GCM antes de guardar en BD
+    aes_key = settings.aes_key
+    firma_cifrada  = encrypt_aes256(firma_template,  aes_key)
+    rostro_cifrado = encrypt_aes256(rostro_template, aes_key)
+    voz_cifrada    = encrypt_aes256(voz_template,    aes_key)
+
+    # Guardar plantilla cifrada
     plantilla = PlantillaBiometrica(
         id_users=current_user.id_users,
-        firma_manuscrita=firma_template,
-        vector_facial=rostro_template,
-        patron_voz=voz_template,
+        firma_manuscrita=firma_cifrada,
+        vector_facial=rostro_cifrado,
+        patron_voz=voz_cifrada,
     )
     db.add(plantilla)
     db.commit()
@@ -109,24 +143,31 @@ async def update_biometrics(
     if not plantilla:
         raise HTTPException(status_code=404, detail="No tiene plantillas biométricas registradas")
 
+    aes_key = settings.aes_key
     updated = []
 
     if firma:
-        firma_bytes = await firma.read()
+        firma_bytes = await _read_validated(firma, _ALLOWED_IMAGE_TYPES, "firma")
         firma_features = biometric_signature.extract_signature_features(firma_bytes)
-        plantilla.firma_manuscrita = biometric_signature.encode_template(firma_features)
+        plantilla.firma_manuscrita = encrypt_aes256(
+            biometric_signature.encode_template(firma_features), aes_key
+        )
         updated.append("firma")
 
     if rostro:
-        rostro_bytes = await rostro.read()
+        rostro_bytes = await _read_validated(rostro, _ALLOWED_IMAGE_TYPES, "rostro")
         rostro_embedding = biometric_face.extract_face_embedding(rostro_bytes)
-        plantilla.vector_facial = biometric_face.encode_template(rostro_embedding)
+        plantilla.vector_facial = encrypt_aes256(
+            biometric_face.encode_template(rostro_embedding), aes_key
+        )
         updated.append("rostro")
 
     if voz:
-        voz_bytes = await voz.read()
+        voz_bytes = await _read_validated(voz, _ALLOWED_AUDIO_TYPES, "voz")
         voz_features = biometric_voice.extract_voice_features(voz_bytes)
-        plantilla.patron_voz = biometric_voice.encode_template(voz_features)
+        plantilla.patron_voz = encrypt_aes256(
+            biometric_voice.encode_template(voz_features), aes_key
+        )
         updated.append("voz")
 
     if not updated:
@@ -152,29 +193,34 @@ def verify_biometrics(
     if not plantilla:
         raise HTTPException(status_code=404, detail="No tiene plantillas biométricas registradas")
 
-    # Verificar firma
+    aes_key = settings.aes_key
+
+    # Verificar firma (descifrar plantilla antes de comparar)
     try:
         firma_bytes = base64.b64decode(data.firma_imagen)
+        firma_template_dec = decrypt_aes256(plantilla.firma_manuscrita, aes_key)
         firma_ok, score_firma = biometric_signature.compare_signatures(
-            plantilla.firma_manuscrita, firma_bytes, settings.SIGNATURE_THRESHOLD
+            firma_template_dec, firma_bytes, settings.SIGNATURE_THRESHOLD
         )
     except Exception:
         firma_ok, score_firma = False, 0.0
 
-    # Verificar rostro
+    # Verificar rostro (descifrar plantilla antes de comparar)
     try:
         rostro_bytes = base64.b64decode(data.rostro_imagen)
+        rostro_template_dec = decrypt_aes256(plantilla.vector_facial, aes_key)
         rostro_ok, score_rostro = biometric_face.compare_faces(
-            plantilla.vector_facial, rostro_bytes, settings.FACE_THRESHOLD
+            rostro_template_dec, rostro_bytes, settings.FACE_THRESHOLD
         )
     except Exception:
         rostro_ok, score_rostro = False, 0.0
 
-    # Verificar voz
+    # Verificar voz (descifrar plantilla antes de comparar)
     try:
         voz_bytes = base64.b64decode(data.audio_voz)
+        voz_template_dec = decrypt_aes256(plantilla.patron_voz, aes_key)
         voz_ok, score_voz = biometric_voice.compare_voices(
-            plantilla.patron_voz, voz_bytes, settings.VOICE_THRESHOLD
+            voz_template_dec, voz_bytes, settings.VOICE_THRESHOLD
         )
     except Exception:
         voz_ok, score_voz = False, 0.0
@@ -197,6 +243,11 @@ def biometric_status(
     current_user: User = Depends(get_current_user),
 ):
     """Verificar si un usuario tiene plantillas biométricas registradas."""
+    # V-009: solo el propio usuario o admin/auditor pueden consultar el estado biométrico
+    rol_nombre = current_user.rol.nombre if current_user.rol else ""
+    if current_user.id_users != user_id and rol_nombre not in ("admin", "auditor"):
+        raise HTTPException(status_code=403, detail="No autorizado para consultar este estado biométrico")
+
     plantilla = db.query(PlantillaBiometrica).filter(
         PlantillaBiometrica.id_users == user_id
     ).first()
@@ -285,12 +336,7 @@ def solicitar_cambio_biometrico(
         db.commit()
         raise HTTPException(
             status_code=503,
-            detail=(
-                "No se pudo enviar el correo de verificación. "
-                "Verifica la configuración SMTP en el archivo .env "
-                "(SMTP_USER, SMTP_PASSWORD, SMTP_FROM). "
-                "Para Gmail necesitas una 'Contraseña de aplicación', no tu contraseña normal."
-            ),
+            detail="No se pudo enviar el correo de verificación. Contacte al administrador.",
         )
 
     return SolicitarCambioResponse(
@@ -354,14 +400,20 @@ async def cambiar_credencial_biometrica(
     if not plantilla:
         raise HTTPException(status_code=404, detail="No tiene plantillas biométricas registradas.")
 
-    # Actualizar la credencial correspondiente
+    aes_key = settings.aes_key
+
+    # Actualizar la credencial correspondiente (cifrar con AES-256-GCM antes de guardar)
     if tipo_credencial == "firma":
         if not nueva_firma:
             raise HTTPException(status_code=400, detail="Debes enviar el archivo nueva_firma.")
         try:
-            firma_bytes = await nueva_firma.read()
+            firma_bytes = await _read_validated(nueva_firma, _ALLOWED_IMAGE_TYPES, "nueva_firma")
             firma_features = biometric_signature.extract_signature_features(firma_bytes)
-            plantilla.firma_manuscrita = biometric_signature.encode_template(firma_features)
+            plantilla.firma_manuscrita = encrypt_aes256(
+                biometric_signature.encode_template(firma_features), aes_key
+            )
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error procesando la nueva firma: {str(e)}")
 
@@ -369,9 +421,13 @@ async def cambiar_credencial_biometrica(
         if not nuevo_rostro:
             raise HTTPException(status_code=400, detail="Debes enviar el archivo nuevo_rostro.")
         try:
-            rostro_bytes = await nuevo_rostro.read()
+            rostro_bytes = await _read_validated(nuevo_rostro, _ALLOWED_IMAGE_TYPES, "nuevo_rostro")
             rostro_embedding = biometric_face.extract_face_embedding(rostro_bytes)
-            plantilla.vector_facial = biometric_face.encode_template(rostro_embedding)
+            plantilla.vector_facial = encrypt_aes256(
+                biometric_face.encode_template(rostro_embedding), aes_key
+            )
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error procesando el nuevo rostro: {str(e)}")
 
@@ -379,9 +435,13 @@ async def cambiar_credencial_biometrica(
         if not nueva_voz:
             raise HTTPException(status_code=400, detail="Debes enviar el archivo nueva_voz.")
         try:
-            voz_bytes = await nueva_voz.read()
+            voz_bytes = await _read_validated(nueva_voz, _ALLOWED_AUDIO_TYPES, "nueva_voz")
             voz_features = biometric_voice.extract_voice_features(voz_bytes)
-            plantilla.patron_voz = biometric_voice.encode_template(voz_features)
+            plantilla.patron_voz = encrypt_aes256(
+                biometric_voice.encode_template(voz_features), aes_key
+            )
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Error procesando la nueva voz: {str(e)}")
 
