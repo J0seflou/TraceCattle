@@ -29,7 +29,7 @@ def get_bitacora(
     fecha_hasta: Optional[datetime] = Query(None),
     limit: int = Query(100, le=500),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("auditor")),
 ):
     """Consultar bitácora del sistema. Auditores ven todo, otros solo sus propias entradas."""
     query = db.query(BitacoraSistema)
@@ -107,7 +107,7 @@ def audit_animal(
 def get_alerts(
     limit: int = Query(50, le=200),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("auditor")),
 ):
     """Obtener intentos fallidos de validación biométrica."""
     query = (
@@ -144,7 +144,7 @@ def get_alerts(
 @router.get("/integridad-global")
 def global_integrity_check(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("auditor")),
 ):
     """Verificar integridad criptográfica de animales."""
     rol_nombre = current_user.rol.nombre if current_user.rol else ""
