@@ -4,9 +4,9 @@ Control de permisos por rol para tipos de evento ganadero.
 
 ROLE_PERMISSIONS = {
     "ganadero": ["nacimiento", "cambio_propietario", "venta", "muerte", "desparacitacion", "vacunacion"],
-    "veterinario": ["vacunacion", "desparacitacion", "certificacion_sanitaria", "muerte"],
+    "veterinario": ["nacimiento", "vacunacion", "desparacitacion", "muerte"],
     "transportista": ["traslado"],
-    "auditor": ["auditoria"],
+    "auditor": ["auditoria", "certificacion_sanitaria"],
 }
 
 

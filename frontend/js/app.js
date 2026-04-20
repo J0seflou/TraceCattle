@@ -71,12 +71,12 @@ function initApp() {
             `${state.user.nombre} ${state.user.apellido}`;
         document.getElementById('nav-user-role').textContent = state.user.rol_nombre;
 
-        // Mostrar/ocultar secciones según el rol
+        // Mostrar/ocultar pestañas de auditoría según el rol
         const rol = state.user.rol_nombre;
-        const auditBtn = document.querySelector('[data-target="section-audit"]');
-        if (auditBtn) {
-            auditBtn.style.display = rol === 'auditor' ? '' : 'none';
-        }
+        // Bitácora y Alertas solo para auditor
+        document.querySelectorAll('.audit-only-tab').forEach(el => {
+            el.style.display = rol === 'auditor' ? '' : 'none';
+        });
 
         loadDashboardStats();
     } else {
