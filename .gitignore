@@ -1,0 +1,16 @@
+# Secretos — nunca subir
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Uploads locales
+uploads/
